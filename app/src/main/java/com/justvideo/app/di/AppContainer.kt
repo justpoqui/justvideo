@@ -1,0 +1,26 @@
+package com.justvideo.app.di
+
+import android.content.Context
+import com.justvideo.app.data.db.AppDatabase
+import com.justvideo.app.data.repo.MediaRepository
+import com.justvideo.app.data.repo.ProjectRepository
+
+// =====================================================================
+// AppContainer.kt
+// Hand-written "dependency injection": builds each shared object exactly
+// once and hands the same copy to every screen that needs it.
+// (This replaces the Hilt library. See the plan for why.)
+// =====================================================================
+
+class AppContainer(context: Context) {
+
+    private val appContext = context.applicationContext
+
+    // STEP 1: The database. `by lazy` means it is only opened the first time
+    // something uses it, which keeps app startup fast.
+    private val database by lazy { AppDatabase.create(appContext) }
+
+    // STEP 2: Repositories shared by every screen.
+    val mediaRepository by lazy { MediaRepository(appContext) }
+    val projectRepository by lazy { ProjectRepository(database.projectDao(), mediaRepository) }
+}

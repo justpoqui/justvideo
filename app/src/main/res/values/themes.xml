@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The window theme shown for a split second before Compose draws.
+  Dark background so the app never flashes white on startup.
+-->
+<resources>
+    <style name="Theme.JustVideo" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/jv_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

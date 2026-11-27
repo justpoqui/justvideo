@@ -1,0 +1,20 @@
+# Gradle / build output
+.gradle/
+build/
+/app/build/
+/local.properties
+/captures/
+.kotlin/
+
+# Android Studio
+.idea/
+*.iml
+.DS_Store
+
+# Built APKs (handed out separately)
+*.apk
+*.aab
+/dist/
+
+# Signing key + passwords stay on the build machine, never in git.
+/keystore/
