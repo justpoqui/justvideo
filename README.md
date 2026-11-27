@@ -19,4 +19,5 @@ The installable APK ends up in `app/build/outputs/apk/release/app-release.apk`.
   - `editor/`: pure timeline editing logic (unit-tested)
   - `ui/`: Compose screens (home, editor, theme, navigation)
 - `app/src/test/`: unit tests + Robolectric UI smoke tests
-- `keystore/` (not in git): the signing key, kept only on the build machine.
+- `signing/justvideo.jks.enc`: the signing key, AES-256 encrypted. GitHub Actions unlocks it with the `JV_KEYSTORE_PASSWORD` secret.
+- `.github/workflows/release.yml`: builds, tests and publishes each new versionCode to Releases (the in-app updater reads it).

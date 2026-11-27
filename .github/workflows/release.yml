@@ -5,7 +5,7 @@
 # It runs on every push to the development branch (or by hand from the
 # Actions tab):
 #   1. run all tests
-#   2. build the release APK, signed with the key from the repo's secrets
+#   2. build the release APK, signed with the app's key (unlocked by a secret)
 #   3. if this versionCode has no release yet, publish "build-<versionCode>"
 #      with the APK attached
 # To ship an update: bump versionCode in app/build.gradle.kts and push.
@@ -38,19 +38,24 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v6
 
-      # STEP 2: Restore the signing key from repository secrets.
+      # STEP 2: Unlock the signing key.
+      # signing/justvideo.jks.enc is the key, encrypted (AES-256) with the
+      # JV_KEYSTORE_PASSWORD secret. It's useless without that password.
       # The same key must sign every build, or Android refuses to update.
-      - name: Restore signing key
+      - name: Unlock signing key
         env:
-          JV_KEYSTORE_B64: ${{ secrets.JV_KEYSTORE_B64 }}
           JV_KEYSTORE_PASSWORD: ${{ secrets.JV_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$JV_KEYSTORE_B64" ] || [ -z "$JV_KEYSTORE_PASSWORD" ]; then
-            echo "::error::Secrets JV_KEYSTORE_B64 / JV_KEYSTORE_PASSWORD are missing. Add them under Settings > Secrets and variables > Actions."
+          if [ -z "$JV_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secret JV_KEYSTORE_PASSWORD is missing. Add it under Settings > Secrets and variables > Actions."
             exit 1
           fi
           mkdir -p keystore
-          echo "$JV_KEYSTORE_B64" | base64 -d > keystore/justvideo.jks
+          if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+               -in signing/justvideo.jks.enc -out keystore/justvideo.jks -pass env:JV_KEYSTORE_PASSWORD; then
+            echo "::error::Couldn't unlock the signing key. JV_KEYSTORE_PASSWORD doesn't match."
+            exit 1
+          fi
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=justvideo\n' "$JV_KEYSTORE_PASSWORD" "$JV_KEYSTORE_PASSWORD" > keystore/keystore.properties
 
       # STEP 3: Tests + build.
