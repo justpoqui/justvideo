@@ -1,0 +1,89 @@
+# =====================================================================
+# release.yml: GitHub Actions workflow that builds the app and publishes
+# it on the repo's Releases page, where the in-app updater finds it.
+#
+# It runs on every push to the development branch (or by hand from the
+# Actions tab):
+#   1. run all tests
+#   2. build the release APK, signed with the key from the repo's secrets
+#   3. if this versionCode has no release yet, publish "build-<versionCode>"
+#      with the APK attached
+# To ship an update: bump versionCode in app/build.gradle.kts and push.
+# =====================================================================
+name: Build & release APK
+
+on:
+  push:
+    branches: [ccr-d6db4ff8-gp3we6, main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create releases
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # STEP 1: Get the code and the tools.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+
+      # STEP 2: Restore the signing key from repository secrets.
+      # The same key must sign every build, or Android refuses to update.
+      - name: Restore signing key
+        env:
+          JV_KEYSTORE_B64: ${{ secrets.JV_KEYSTORE_B64 }}
+          JV_KEYSTORE_PASSWORD: ${{ secrets.JV_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$JV_KEYSTORE_B64" ] || [ -z "$JV_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secrets JV_KEYSTORE_B64 / JV_KEYSTORE_PASSWORD are missing. Add them under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          mkdir -p keystore
+          echo "$JV_KEYSTORE_B64" | base64 -d > keystore/justvideo.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=justvideo\n' "$JV_KEYSTORE_PASSWORD" "$JV_KEYSTORE_PASSWORD" > keystore/keystore.properties
+
+      # STEP 3: Tests + build.
+      - name: Test and build
+        run: ./gradlew testDebugUnitTest assembleRelease --no-configuration-cache
+
+      # STEP 4: Read the version from the build file.
+      - name: Read version
+        id: ver
+        run: |
+          code=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          name=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Version $name (build $code)"
+
+      # STEP 5: Publish, but only once per versionCode.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.ver.outputs.code }}
+          NAME: ${{ steps.ver.outputs.name }}
+        run: |
+          tag="build-$CODE"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; bump versionCode to publish a new one."
+            exit 0
+          fi
+          apk="JustVideo-$NAME-build$CODE.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          git log -1 --pretty=%B > notes.txt
+          gh release create "$tag" "$apk" \
+            --title "JustVideo $NAME (build $CODE)" \
+            --notes-file notes.txt \
+            --target "$GITHUB_SHA" \
+            --latest

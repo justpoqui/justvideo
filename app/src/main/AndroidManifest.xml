@@ -2,12 +2,19 @@
 <!--
   AndroidManifest.xml: tells Android what the app contains and what it needs.
 
-  Phase 1 steps 1–3 need NO storage permissions:
+  Media import needs NO storage permissions:
   - Videos/photos come from the Android Photo Picker.
   - Audio comes from the system file picker.
   Both grant access to only the files you pick.
+
+  Network is used for ONE thing only: the in-app updater, which checks this
+  app's GitHub Releases page. Editing and AI features stay fully offline.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Updater: talk to GitHub, and ask Android to install the downloaded update. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".JustVideoApp"
@@ -29,5 +36,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Receives the result of installing an update (success, needs confirmation, or failed).
+             Not exported: only Android's installer, through our own PendingIntent, can reach it. -->
+        <receiver
+            android:name=".core.update.InstallResultReceiver"
+            android:exported="false" />
     </application>
 </manifest>

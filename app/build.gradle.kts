@@ -28,8 +28,12 @@ android {
         targetSdk = 37
         // STEP 2: Bump versionCode on every build we hand out, so Android
         // accepts it as an update over the previous install.
-        versionCode = 1
-        versionName = "0.1.0-phase1"
+        versionCode = 2
+        versionName = "0.1.1"
+
+        // STEP 2b: Where the in-app updater looks for new builds:
+        // the GitHub Releases page of this (public) repository.
+        buildConfigField("String", "UPDATE_REPO", "\"justpoqui/justvideo\"")
     }
 
     // STEP 3: One fixed signing key, kept ONLY on the build machine
@@ -83,6 +87,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true // gives us BuildConfig.VERSION_CODE etc. in code
     }
 
     // Robolectric UI tests need the app's resources and manifest.

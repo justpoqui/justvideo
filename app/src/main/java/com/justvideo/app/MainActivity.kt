@@ -1,5 +1,6 @@
 package com.justvideo.app
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,6 +26,8 @@ import com.justvideo.app.ui.theme.JustVideoTheme
 
 class MainActivity : ComponentActivity() {
 
+    private val updater get() = (application as JustVideoApp).container.updateManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // STEP 1: Draw behind the status bar and navigation bar (modern Android
@@ -35,6 +38,12 @@ class MainActivity : ComponentActivity() {
         // tiny file, so reading it here is fine).
         val crashReport = if (savedInstanceState == null) CrashReporter.pendingReport(this) else null
 
+        // STEP 3: Look for a new version on GitHub (at most every 3 hours).
+        // This is skipped in automated tests, which have no internet.
+        if (savedInstanceState == null && Build.FINGERPRINT != "robolectric") {
+            updater.checkAutomatically()
+        }
+
         setContent {
             JustVideoTheme {
                 Box(
@@ -42,10 +51,10 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    // STEP 3: The app's screens.
+                    // STEP 4: The app's screens.
                     AppNavHost()
 
-                    // STEP 4: Crash report popup, shown above everything else.
+                    // STEP 5: Crash report popup, shown above everything else.
                     var report by remember { mutableStateOf(crashReport) }
                     report?.let { text ->
                         ReportDialog(
@@ -61,5 +70,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // STEP 6: Coming back to the app (e.g. from the "Install unknown apps"
+    // setting): let the updater continue where it stopped.
+    override fun onResume() {
+        super.onResume()
+        updater.onAppResumed()
     }
 }
