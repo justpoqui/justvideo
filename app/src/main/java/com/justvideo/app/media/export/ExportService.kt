@@ -83,12 +83,24 @@ class ExportService : Service() {
             return
         }
         current = job
-        val composition = CompositionBuilder.build(job.timeline, job.format, this)
-        if (composition == null) {
-            manager.failedCount++
-            runNext()
-            return
+        // Building the composition draws text/photo layers, so do it off the
+        // main thread, then start Transformer back on the main thread.
+        scope.launch {
+            val composition = try {
+                withContext(Dispatchers.Default) { CompositionBuilder.build(job.timeline, job.format, this@ExportService) }
+            } catch (e: Exception) {
+                AppLog.e(TAG, "Couldn't prepare export", e); null
+            }
+            if (composition == null || cancelled) {
+                manager.failedCount++
+                runNext()
+            } else {
+                startTransformer(job, composition)
+            }
         }
+    }
+
+    private fun startTransformer(job: ExportJob, composition: Composition) {
         val out = File(cacheDir, "export_${job.id}.mp4").also { it.delete() }
         currentFile = out
 

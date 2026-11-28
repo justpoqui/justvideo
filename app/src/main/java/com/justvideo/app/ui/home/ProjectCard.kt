@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Movie
@@ -38,14 +39,16 @@ import com.justvideo.app.ui.theme.PanelHigh
 
 // =====================================================================
 // ProjectCard.kt
-// One row in the Home project list: tap to open, ⋮ to rename/delete.
+// One row in the Home drafts list: tap to open, ⋮ to rename/duplicate/delete.
 // =====================================================================
 
 @Composable
 fun ProjectCard(
     project: ProjectSummary,
+    thumbnail: androidx.compose.ui.graphics.ImageBitmap?,
     onOpen: () -> Unit,
     onRename: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -59,7 +62,7 @@ fun ProjectCard(
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // STEP 1: Placeholder thumbnail. Step 5 shows a real video frame here.
+        // STEP 1: Thumbnail: a frame of the first clip (an icon until it loads).
         Box(
             Modifier
                 .size(56.dp)
@@ -67,7 +70,11 @@ fun ProjectCard(
                 .background(PanelHigh),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            if (thumbnail != null) {
+                androidx.compose.foundation.Image(thumbnail, null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.size(56.dp))
+            } else {
+                Icon(Icons.Rounded.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
         }
         Spacer(Modifier.width(12.dp))
 
@@ -96,6 +103,11 @@ fun ProjectCard(
                     text = { Text("Rename") },
                     leadingIcon = { Icon(Icons.Rounded.Edit, null) },
                     onClick = { menuOpen = false; onRename() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Duplicate") },
+                    leadingIcon = { Icon(Icons.Rounded.ContentCopy, null) },
+                    onClick = { menuOpen = false; onDuplicate() },
                 )
                 DropdownMenuItem(
                     text = { Text("Delete") },

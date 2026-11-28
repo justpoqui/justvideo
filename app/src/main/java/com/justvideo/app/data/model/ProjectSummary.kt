@@ -11,4 +11,8 @@ data class ProjectSummary(
     val updatedAtMillis: Long,
     val durationMs: Long,
     val clipCount: Int,
+    /** First clip, for the thumbnail (null if the project is empty). */
+    val thumbUri: String? = null,
+    val thumbKind: MediaKind? = null,
+    val thumbTimeMs: Long = 0,
 )

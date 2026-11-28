@@ -5,6 +5,8 @@ import com.justvideo.app.data.db.ProjectEntity
 import com.justvideo.app.data.model.ProjectSummary
 import com.justvideo.app.data.model.Timeline
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -29,8 +31,12 @@ class ProjectRepository(
     // STEP 1: Live project list for the Home screen.
     fun observeProjects(): Flow<List<ProjectSummary>> =
         dao.observeAll().map { rows ->
-            rows.map { ProjectSummary(it.id, it.name, it.updatedAtMillis, it.durationMs, it.clipCount) }
-        }
+            rows.map {
+                // The first clip gives the card's thumbnail.
+                val first = TimelineJson.decode(it.timelineJson).videoClips.firstOrNull()
+                ProjectSummary(it.id, it.name, it.updatedAtMillis, it.durationMs, it.clipCount, first?.sourceUri, first?.kind, first?.trimStartMs ?: 0)
+            }
+        }.flowOn(Dispatchers.Default)
 
     // STEP 2: Create an empty project named after the current date/time.
     suspend fun createProject(): String {
@@ -69,6 +75,15 @@ class ProjectRepository(
                 clipCount = timeline.videoClips.size + timeline.audioClips.size,
             )
         )
+    }
+
+    // STEP 4b: Drafts: copy a project (same edit, new name), to try a variation.
+    suspend fun duplicate(id: String): String? {
+        val row = dao.getById(id) ?: return null
+        val now = clock()
+        val newId = UUID.randomUUID().toString()
+        dao.insert(row.copy(id = newId, name = (row.name + " (copy)").take(60), createdAtMillis = now, updatedAtMillis = now))
+        return newId
     }
 
     suspend fun rename(id: String, newName: String) {

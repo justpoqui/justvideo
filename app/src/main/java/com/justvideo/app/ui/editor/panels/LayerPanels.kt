@@ -46,6 +46,7 @@ import com.justvideo.app.media.captions.CaptionWord
 @Composable
 fun TextEditorDialog(initial: TextItem, isNew: Boolean, onDone: (TextItem) -> Unit, onDismiss: () -> Unit) {
     var item by remember { mutableStateOf(initial) }
+    var animation by remember { mutableStateOf(com.justvideo.app.editor.TextAnimation.NONE) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isNew) "Add text" else "Edit text") },
@@ -57,9 +58,19 @@ fun TextEditorDialog(initial: TextItem, isNew: Boolean, onDone: (TextItem) -> Un
                 SliderRow("Size", item.size, 0.03f..0.2f, { "${(it * 100).toInt()}" }, {}, { item = item.copy(size = it) })
                 SwitchRow("Background box", item.background) { item = item.copy(background = it) }
                 SliderRow("Shows for", item.durationMs.toFloat(), 500f..15_000f, { "%.1f s".format(it / 1000) }, {}, { item = item.copy(durationMs = (it / 100).toLong() * 100) })
+                // Motion graphics: how the text animates in.
+                Text("Animation", style = MaterialTheme.typography.bodyMedium)
+                ChipRow(com.justvideo.app.editor.TextAnimation.entries, animation, { it.label }, { animation = it })
             }
         },
-        confirmButton = { TextButton(onClick = { onDone(item) }, enabled = item.text.isNotBlank()) { Text(if (isNew) "Add" else "Done") } },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDone(if (animation == com.justvideo.app.editor.TextAnimation.NONE) item else com.justvideo.app.editor.Templates.animate(item, animation))
+                },
+                enabled = item.text.isNotBlank(),
+            ) { Text(if (isNew) "Add" else "Done") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

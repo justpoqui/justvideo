@@ -9,20 +9,23 @@ Phase 2 (Auto Highlights): complete: audio + speech (whisper.cpp) + visual (moti
 weighted scoring, snapped 10–15 s clips, Highlights screen, settings/presets, batch 9:16 export with captions + auto-reframe.
 Phase 3 (editing): complete: undo/redo, text, editable word-highlight captions, transitions (fade, crossfade, slide, zoom),
 volume/fades, speed 0.25–4×, crop/zoom/pan, auto-reframe (ML Kit faces), stickers and picture-in-picture.
+Phase 4 (pro): complete: color (brightness/contrast/saturation, filters, .cube LUTs), keyframes, remove silences,
+autosaved drafts (thumbnails, duplicate), highlight presets, Create-tab templates (slideshow, beat-synced music video,
+promo, tutorial, explainer, animated titles).
 
-## Create tab roadmap
+## Create tab
 These categories are adapted from the awesome-claude-video-skills list, reworked as offline, on-device features:
 
 | Category | Feature | Phase |
 |---|---|---|
-| Edit a video | Timeline editor | 1 (ready) |
-| Shorts & social | Auto Highlights | 2 |
-| Explainers | Auto-captions with word-by-word highlight | 3 |
-| Stories & slideshows | Ken Burns photo slideshow + transitions | 3 |
-| Motion graphics | Animated titles, lower thirds, stickers | 3 |
-| Music videos | Beat-synced cuts | 4 |
-| Promo & demos | Templates (intro, highlights, end screen) | 4 |
-| Tutorials | Step titles + zoom-ins | 4 |
+| Edit a video | Timeline editor | ready |
+| Shorts & social | Auto Highlights | ready |
+| Explainers | Auto-captions with word-by-word highlight | ready |
+| Stories & slideshows | Ken Burns photo slideshow + crossfades | ready |
+| Motion graphics | Animated titles (pop, slide, drift) | ready |
+| Music videos | Beat-synced cuts | ready |
+| Promo & demos | Title card + end card template | ready |
+| Tutorials | "Step N" titles | ready |
 
 ## Building (cloud build machine)
 ```

@@ -1,12 +1,12 @@
 package com.justvideo.app.ui.create
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -23,9 +23,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 /** What tapping a tile does. */
 enum class CreateAction {
-    NEW_PROJECT,      // opens a blank project in the editor (works today)
-    AUTO_HIGHLIGHTS,  // Phase 2 headline feature
-    COMING_SOON,      // planned, so we explain what it will do
+    NEW_PROJECT,      // a blank project in the editor
+    AUTO_HIGHLIGHTS,  // long video → best clips
+    EXPLAINER,        // pick videos → captions are generated automatically
+    SLIDESHOW,        // pick photos → Ken Burns slideshow
+    MOTION,           // blank project + animated title ready to edit
+    MUSIC_VIDEO,      // pick videos, then a song → cuts on the beat
+    PROMO,            // pick videos → title card + end card
+    TUTORIAL,         // pick videos → "Step 1, 2, 3" titles
 }
 
 data class CreateCategory(
@@ -35,53 +40,21 @@ data class CreateCategory(
     val description: String,
     val icon: ImageVector,
     val action: CreateAction,
-    /** Shown as a badge, e.g. "Ready" or "Phase 3". */
-    val status: String,
+    /** Shown as a badge. */
+    val status: String = "Ready",
 )
 
 object CreateCatalog {
 
-    // STEP 1: The categories, roughly in the order they'll become usable.
+    // STEP 1: The categories.
     val categories = listOf(
-        CreateCategory(
-            id = "edit", title = "Edit a video",
-            description = "Trim, split, reorder and add music on a timeline",
-            icon = Icons.Rounded.ContentCut, action = CreateAction.NEW_PROJECT, status = "Ready",
-        ),
-        CreateCategory(
-            id = "shorts", title = "Shorts & social",
-            description = "Auto Highlights: long video → ranked 10–15 s vertical clips",
-            icon = Icons.Rounded.AutoAwesome, action = CreateAction.AUTO_HIGHLIGHTS, status = "Ready",
-        ),
-        CreateCategory(
-            id = "explainer", title = "Explainers",
-            description = "Talking video with auto-captions, word-by-word highlight",
-            icon = Icons.Rounded.Subtitles, action = CreateAction.COMING_SOON, status = "Phase 3",
-        ),
-        CreateCategory(
-            id = "stories", title = "Stories & slideshows",
-            description = "Photos with slow pan/zoom (Ken Burns) and transitions",
-            icon = Icons.Rounded.AutoStories, action = CreateAction.COMING_SOON, status = "Phase 3",
-        ),
-        CreateCategory(
-            id = "motion", title = "Motion graphics",
-            description = "Animated titles, lower thirds and sticker presets",
-            icon = Icons.Rounded.Animation, action = CreateAction.COMING_SOON, status = "Phase 3",
-        ),
-        CreateCategory(
-            id = "music", title = "Music videos",
-            description = "Cuts that snap to the beat of your song",
-            icon = Icons.Rounded.GraphicEq, action = CreateAction.COMING_SOON, status = "Phase 4",
-        ),
-        CreateCategory(
-            id = "promo", title = "Promo & demos",
-            description = "Ready-made templates: intro card, highlights, end screen",
-            icon = Icons.Rounded.Campaign, action = CreateAction.COMING_SOON, status = "Phase 4",
-        ),
-        CreateCategory(
-            id = "tutorial", title = "Tutorials",
-            description = "Step titles and zoom-ins for how-to videos",
-            icon = Icons.Rounded.School, action = CreateAction.COMING_SOON, status = "Phase 4",
-        ),
+        CreateCategory("edit", "Edit a video", "Trim, split, reorder, text, music, effects", Icons.Rounded.ContentCut, CreateAction.NEW_PROJECT),
+        CreateCategory("shorts", "Shorts & social", "Auto Highlights: long video → ranked 10–15 s vertical clips", Icons.Rounded.AutoAwesome, CreateAction.AUTO_HIGHLIGHTS),
+        CreateCategory("explainer", "Explainers", "Pick talking clips; word-by-word captions are added for you", Icons.Rounded.Subtitles, CreateAction.EXPLAINER),
+        CreateCategory("stories", "Stories & slideshows", "Photos with slow pan/zoom (Ken Burns) and crossfades", Icons.Rounded.AutoStories, CreateAction.SLIDESHOW),
+        CreateCategory("motion", "Motion graphics", "Animated titles: pop, slide, drift. Starts with a title to edit", Icons.Rounded.Animation, CreateAction.MOTION),
+        CreateCategory("music", "Music videos", "Pick clips, then a song: cuts land on the beat", Icons.Rounded.GraphicEq, CreateAction.MUSIC_VIDEO),
+        CreateCategory("promo", "Promo & demos", "Your clips with an animated title card and end card", Icons.Rounded.Campaign, CreateAction.PROMO),
+        CreateCategory("tutorial", "Tutorials", "\"Step 1, 2, 3…\" titles on each clip", Icons.Rounded.School, CreateAction.TUTORIAL),
     )
 }

@@ -7,6 +7,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.CompositionPlayer
 import com.justvideo.app.core.AppLog
+import com.justvideo.app.data.model.OverlayKind
 import com.justvideo.app.data.model.Timeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -73,9 +74,25 @@ class PreviewController(
     // edit. It rebuilds only if the timeline actually changed, and keeps
     // the playhead where it was (clamped to the new length).
     fun setTimeline(timeline: Timeline) {
-        if (timeline == loadedTimeline) return
+        // Texts/stickers/photos are drawn by the editor itself, so changing
+        // only those never needs the video rebuilt.
+        val key = timeline.copy(texts = emptyList(), overlays = timeline.overlays.filter { it.kind == OverlayKind.VIDEO })
+        if (key == loadedTimeline) return
+        _ui.value = _ui.value.copy(durationMs = timeline.durationMs)
+        pending?.cancel()
+        // First load / emptied project: right away. Edits while a slider is
+        // dragged: wait ~120 ms and only apply the newest, so it stays smooth.
+        if (_player == null || timeline.videoClips.isEmpty()) {
+            apply(key)
+        } else {
+            pending = scope.launch { delay(120); apply(key) }
+        }
+    }
+
+    private var pending: Job? = null
+
+    private fun apply(timeline: Timeline) {
         loadedTimeline = timeline
-        // Text/sticker/photo layers are drawn by the editor itself (so they can be dragged).
         val composition = CompositionBuilder.build(timeline, context = context, includeLayers = false)
         if (composition == null) {
             release()
@@ -142,6 +159,7 @@ class PreviewController(
 
     // STEP 6: Free the video decoders. Called when the editor closes for good.
     fun release() {
+        pending?.cancel()
         ticker?.cancel()
         _player?.removeListener(listener)
         _player?.release()

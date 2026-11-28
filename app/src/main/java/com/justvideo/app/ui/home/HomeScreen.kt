@@ -1,6 +1,9 @@
 package com.justvideo.app.ui.home
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -76,7 +79,15 @@ fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {
     // the app-wide updater.
     val context = LocalContext.current
     val container = (context.applicationContext as JustVideoApp).container
-    val vm: HomeViewModel = viewModel { HomeViewModel(container.projectRepository) }
+    val vm: HomeViewModel = viewModel {
+        HomeViewModel(
+            container.projectRepository, container.mediaRepository, container.clipTools,
+            speechModel = { container.analysisStore.loadSettings().speechModel },
+            speechReady = { container.speechModels.isReady(container.analysisStore.loadSettings().speechModel) },
+        )
+    }
+    val building by vm.building.collectAsStateWithLifecycle()
+    val thumbs = container.thumbnailLoader
     val state by vm.state.collectAsStateWithLifecycle()
     val updater = container.updateManager
     val updateState by updater.state.collectAsStateWithLifecycle()
@@ -108,6 +119,41 @@ fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {
                 say("Couldn't create project: ${e.message}")
             },
         )
+    }
+
+    // STEP 3b: Create-tab templates: pick files, then build. Music videos
+    // need two picks (clips, then a song), so the clips wait here.
+    var pendingTemplate by rememberSaveable { mutableStateOf<CreateAction?>(null) }
+    var pendingUris by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
+    fun build(action: CreateAction, uris: List<android.net.Uri>, song: android.net.Uri?) =
+        vm.createFromTemplate(action, uris, song, onCreated = onOpenProject, onMessage = ::say)
+    val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { song ->
+        if (song != null && pendingUris.isNotEmpty()) build(CreateAction.MUSIC_VIDEO, pendingUris, song)
+        pendingTemplate = null
+    }
+    val pickForTemplate = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        val action = pendingTemplate ?: return@rememberLauncherForActivityResult
+        if (uris.isEmpty()) { pendingTemplate = null; return@rememberLauncherForActivityResult }
+        if (action == CreateAction.MUSIC_VIDEO) {
+            pendingUris = uris
+            say("Now pick the song")
+            pickSong.launch(arrayOf("audio/*"))
+        } else {
+            build(action, uris, null); pendingTemplate = null
+        }
+    }
+    fun startTemplate(action: CreateAction) {
+        pendingTemplate = action
+        val type = if (action == CreateAction.SLIDESHOW) ActivityResultContracts.PickVisualMedia.ImageOnly
+        else ActivityResultContracts.PickVisualMedia.ImageAndVideo
+        pickForTemplate.launch(PickVisualMediaRequest(type))
+    }
+
+    // Draft thumbnails (first frame of each project).
+    LaunchedEffect(state.projects) {
+        thumbs.want(state.projects.orEmpty().mapNotNull { p ->
+            p.thumbUri?.let { com.justvideo.app.media.thumbs.ThumbKey(it, p.thumbKind ?: com.justvideo.app.data.model.MediaKind.VIDEO, if (p.thumbKind == com.justvideo.app.data.model.MediaKind.IMAGE) 0 else (p.thumbTimeMs / 500) * 500) }
+        })
     }
 
     // STEP 4: A manual "Check for updates" that finds nothing (or fails
@@ -180,7 +226,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {
                     when (c.action) {
                         CreateAction.NEW_PROJECT -> newProject()
                         CreateAction.AUTO_HIGHLIGHTS -> onOpenHighlights()
-                        CreateAction.COMING_SOON -> say("${c.title}: ${c.description}. Coming in ${c.status}")
+                        else -> startTemplate(c.action)
                     }
                 },
             )
@@ -230,7 +276,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {
 
             item {
                 Text(
-                    "Projects",
+                    "Drafts · saved automatically",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 8.dp),
                 )
@@ -254,8 +300,12 @@ fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {
                 else -> items(projects, key = { it.id }) { p ->
                     ProjectCard(
                         project = p,
+                        thumbnail = p.thumbUri?.let { u ->
+                            thumbs[com.justvideo.app.media.thumbs.ThumbKey(u, p.thumbKind ?: com.justvideo.app.data.model.MediaKind.VIDEO, if (p.thumbKind == com.justvideo.app.data.model.MediaKind.IMAGE) 0 else (p.thumbTimeMs / 500) * 500)]
+                        },
                         onOpen = { onOpenProject(p.id) },
                         onRename = { renameId = p.id },
+                        onDuplicate = { vm.duplicate(p.id) },
                         onDelete = { deleteId = p.id },
                     )
                 }
@@ -264,6 +314,17 @@ fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {
     }
 
     // STEP 12: Popups.
+    building?.let { b ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text(b.label) },
+            text = {
+                if (b.progress != null) androidx.compose.material3.LinearProgressIndicator(progress = { b.progress }, modifier = Modifier.fillMaxWidth())
+                else androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+            },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = vm::cancelTemplate) { Text("Cancel") } },
+        )
+    }
     val list = state.projects.orEmpty()
     list.firstOrNull { it.id == renameId }?.let { p ->
         RenameProjectDialog(
