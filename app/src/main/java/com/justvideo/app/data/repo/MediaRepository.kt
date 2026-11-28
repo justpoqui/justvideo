@@ -48,6 +48,16 @@ class MediaRepository(private val context: Context) {
         }
     }
 
+    // STEP 2b: Can we still open this file? (False if it was deleted, or
+    // access was taken away.) Runs on the IO pool.
+    suspend fun isReadable(uriString: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            resolver.openFileDescriptor(Uri.parse(uriString), "r")?.use { true } ?: false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     // STEP 3: Work out what a picked file is and read its details.
     // Runs on the IO thread pool, because reading a file can be slow.
     // Returns null if the file can't be read (corrupt, unsupported, deleted).

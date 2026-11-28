@@ -4,8 +4,7 @@ A fast, offline, free video editor for Android phones, built for short-form cont
 Its headline feature is **Auto Highlights**: it finds the best 10–15 s moments in a long video.
 
 ## Status
-Phase 1 (core editor): steps 1–5 done (skeleton, projects database, media import, preview player,
-zoomable timeline). Next: step 6 (trim/split/reorder), step 7 (export), step 8 (hardening).
+Phase 1 (core editor): complete (import, preview, timeline, trim/split/reorder, export, hardening).
 
 ## Create tab roadmap
 These categories are adapted from the awesome-claude-video-skills list, reworked as offline, on-device features:

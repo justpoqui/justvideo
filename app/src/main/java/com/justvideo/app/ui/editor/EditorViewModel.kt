@@ -24,7 +24,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // =====================================================================
 // EditorViewModel.kt
@@ -72,7 +74,9 @@ class EditorViewModel(
             pendingSave.collect { timeline ->
                 if (timeline != null) {
                     try {
-                        projects.saveTimeline(projectId, timeline)
+                        // NonCancellable: if you leave the editor mid-save, the
+                        // save still finishes instead of being cut off.
+                        withContext(NonCancellable) { projects.saveTimeline(projectId, timeline) }
                     } catch (e: Exception) {
                         AppLog.e(TAG, "Save failed", e)
                         _messages.send("Couldn't save: ${e.message}")
@@ -90,7 +94,28 @@ class EditorViewModel(
             else it.copy(isLoading = false, projectName = project.name, timeline = project.timeline)
         }
         project?.let { refreshPreview(it.timeline) }
+
+        // STEP 4b: Check every file still exists. Videos deleted from the
+        // gallery (or on a removed SD card) would otherwise break playback.
+        if (project != null) {
+            val clips = project.timeline.videoClips + project.timeline.audioClips
+            val missingUris = clips.map { it.sourceUri }.distinct().filterNot { media.isReadable(it) }.toSet()
+            val missing = clips.filter { it.sourceUri in missingUris }.map { it.id }.toSet()
+            if (missing.isNotEmpty()) {
+                AppLog.w(TAG, "${missing.size} clip(s) have missing files")
+                _state.update { it.copy(missingClipIds = missing) }
+            }
+        }
     }
+
+    /** Remove the clips whose files are gone (you tapped Remove on the warning). */
+    fun removeMissingClips() {
+        val missing = _state.value.missingClipIds
+        edit { tl -> missing.fold(tl) { acc, id -> TimelineOps.delete(acc, id) } }
+        _state.update { it.copy(missingClipIds = emptySet()) }
+    }
+
+    fun keepMissingClips() = _state.update { it.copy(missingClipIds = emptySet()) }
 
     // STEP 5: Videos/photos picked from the Photo Picker.
     fun onVisualMediaPicked(uris: List<Uri>) = import(uris, forcedKind = null) { tl, clips ->

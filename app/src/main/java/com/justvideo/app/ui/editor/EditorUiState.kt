@@ -18,4 +18,6 @@ data class EditorUiState(
     val importingCount: Int = 0,
     /** The clip you tapped (highlighted, and the target of Delete). */
     val selectedClipId: String? = null,
+    /** Clips whose original file can't be found any more (deleted from the gallery). */
+    val missingClipIds: Set<String> = emptySet(),
 )

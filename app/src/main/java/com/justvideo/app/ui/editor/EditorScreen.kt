@@ -3,13 +3,18 @@ package com.justvideo.app.ui.editor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,6 +110,22 @@ fun EditorScreen(onBack: () -> Unit) {
         vm.onAudioPicked(it)
     }
 
+    // STEP 4a: Some clips' files are gone: offer to remove them.
+    if (state.missingClipIds.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = vm::keepMissingClips,
+            title = { Text("Some files are missing") },
+            text = {
+                Text(
+                    "${state.missingClipIds.size} clip(s) point to files that were deleted or moved. " +
+                        "Remove them from the project? (Otherwise the preview and export may fail.)"
+                )
+            },
+            confirmButton = { TextButton(onClick = vm::removeMissingClips) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = vm::keepMissingClips) { Text("Keep") } },
+        )
+    }
+
     // STEP 4b: The export panel.
     if (showExport) {
         LaunchedEffect(Unit) { vm.pausePlayback() }
@@ -169,35 +191,52 @@ fun EditorScreen(onBack: () -> Unit) {
                 }
                 // STEP 6: The editor. The preview gets the spare space, with
                 // the play bar and timeline under it.
-                else -> Column(Modifier.fillMaxSize()) {
-                    PreviewPane(
-                        player = player,
-                        playback = playback,
-                        isEmpty = state.timeline.isEmpty,
-                        onTogglePlay = vm::togglePlay,
-                        modifier = Modifier.weight(1f),
-                    )
-                    PlaybackBar(
-                        playback = playback,
-                        enabled = player != null,
-                        onTogglePlay = vm::togglePlay,
-                        onSeek = vm::seekTo,
-                    )
-                    if (state.importingCount > 0) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                // STEP 6: The editor. Portrait: preview on top with the timeline
+                // under it. Landscape: preview on the left, timeline on the right.
+                else -> {
+                    val preview: @Composable (Modifier) -> Unit = { m ->
+                        PreviewPane(
+                            player = player,
+                            playback = playback,
+                            isEmpty = state.timeline.isEmpty,
+                            onTogglePlay = vm::togglePlay,
+                            modifier = m,
+                        )
                     }
-                    // The zoomable timeline (drag = scrub, pinch = zoom, tap = select).
-                    TimelineView(
-                        timeline = state.timeline,
-                        playheadMs = playback.positionMs,
-                        isPlaying = playback.isPlaying,
-                        selectedClipId = state.selectedClipId,
-                        thumbnails = app.container.thumbnailLoader,
-                        onScrub = vm::seekTo,
-                        onScrubStart = vm::onScrubStart,
-                        onClipTapped = vm::onClipTapped,
-                        onEditCommit = vm::commitEdit,
-                    )
+                    val controls: @Composable () -> Unit = {
+                        PlaybackBar(
+                            playback = playback,
+                            enabled = player != null,
+                            onTogglePlay = vm::togglePlay,
+                            onSeek = vm::seekTo,
+                        )
+                        if (state.importingCount > 0) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                        }
+                        // The zoomable timeline (drag = scrub, pinch = zoom, tap = select).
+                        TimelineView(
+                            timeline = state.timeline,
+                            playheadMs = playback.positionMs,
+                            isPlaying = playback.isPlaying,
+                            selectedClipId = state.selectedClipId,
+                            thumbnails = app.container.thumbnailLoader,
+                            onScrub = vm::seekTo,
+                            onScrubStart = vm::onScrubStart,
+                            onClipTapped = vm::onClipTapped,
+                            onEditCommit = vm::commitEdit,
+                        )
+                    }
+                    if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                        Row(Modifier.fillMaxSize()) {
+                            preview(Modifier.weight(1f).fillMaxHeight())
+                            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) { controls() }
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            preview(Modifier.weight(1f))
+                            controls()
+                        }
+                    }
                 }
             }
         }

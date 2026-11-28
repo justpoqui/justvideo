@@ -23,6 +23,13 @@ class JustVideoApp : Application() {
         // STEP 2: Build the shared objects.
         container = AppContainer(this)
         AppLog.i("App", "JustVideo started")
+        // STEP 2b: Delete half-finished export files left by a crash or a
+        // killed app (they can be hundreds of MB).
+        Thread {
+            cacheDir.listFiles { f -> f.name.startsWith("export_") && f.name.endsWith(".mp4") }
+                ?.filter { System.currentTimeMillis() - it.lastModified() > 60 * 60 * 1000 }
+                ?.forEach { it.delete() }
+        }.start()
     }
 
     // STEP 3: Android is low on memory: empty the thumbnail cache (the
