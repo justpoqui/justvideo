@@ -167,16 +167,14 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
                     onClick = {
                         if (creating) return@Button
                         creating = true
-                        scope.launch {
-                            try {
-                                onOpenProject(vm.createProject())
-                            } catch (e: Exception) {
-                                AppLog.e("Home", "createProject failed", e)
-                                snackbar.showSnackbar("Couldn't create project: ${e.message}")
-                            } finally {
+                        vm.createProject(
+                            onCreated = { id -> creating = false; onOpenProject(id) },
+                            onFailed = { e ->
                                 creating = false
-                            }
-                        }
+                                AppLog.e("Home", "createProject failed", e)
+                                scope.launch { snackbar.showSnackbar("Couldn't create project: ${e.message}") }
+                            },
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()

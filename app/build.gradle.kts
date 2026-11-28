@@ -28,8 +28,8 @@ android {
         targetSdk = 37
         // STEP 2: Bump versionCode on every build we hand out, so Android
         // accepts it as an update over the previous install.
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
 
         // STEP 2b: Where the in-app updater looks for new builds:
         // the GitHub Releases page of this (public) repository.
@@ -122,6 +122,13 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+
+    // Media3: preview player (CompositionPlayer lives in "transformer",
+    // the same library that will export). ui-compose draws the video.
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.effect)
+    implementation(libs.media3.ui.compose)
 
     // JSON + coroutines
     implementation(libs.kotlinx.serialization.json)

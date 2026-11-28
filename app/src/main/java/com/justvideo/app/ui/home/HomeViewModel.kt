@@ -28,8 +28,18 @@ class HomeViewModel(private val projects: ProjectRepository) : ViewModel() {
         .map { HomeUiState(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
-    // STEP 2: Create a project and return its id, so the screen can open it.
-    suspend fun createProject(): String = projects.createProject()
+    // STEP 2: Create a project, then hand its id back so the screen can
+    // open it. viewModelScope always calls back on the main thread, which
+    // is where navigation must happen.
+    fun createProject(onCreated: (String) -> Unit, onFailed: (Exception) -> Unit) {
+        viewModelScope.launch {
+            try {
+                onCreated(projects.createProject())
+            } catch (e: Exception) {
+                onFailed(e)
+            }
+        }
+    }
 
     fun rename(id: String, name: String) {
         viewModelScope.launch { projects.rename(id, name) }

@@ -32,18 +32,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.justvideo.app.JustVideoApp
+import com.justvideo.app.ui.editor.preview.PlaybackBar
 import com.justvideo.app.ui.editor.preview.PreviewPane
 import com.justvideo.app.ui.editor.timeline.SimpleTrackList
 import com.justvideo.app.ui.editor.toolbar.EditorToolbar
 
 // =====================================================================
 // EditorScreen.kt
-// CapCut-style layout: preview on top, timeline in the middle, tools at
-// the bottom. This file only arranges the parts. Each part is its own file.
+// CapCut-style layout: preview on top, play bar, timeline in the middle,
+// tools at the bottom. This file only arranges the parts. Each part is
+// its own file.
 // =====================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,17 +55,28 @@ import com.justvideo.app.ui.editor.toolbar.EditorToolbar
 fun EditorScreen(onBack: () -> Unit) {
     // STEP 1: ViewModel. createSavedStateHandle() hands it the project id
     // from the navigation route.
-    val container = (LocalContext.current.applicationContext as JustVideoApp).container
+    val app = LocalContext.current.applicationContext as JustVideoApp
     val vm: EditorViewModel = viewModel {
-        EditorViewModel(createSavedStateHandle(), container.projectRepository, container.mediaRepository)
+        EditorViewModel(
+            createSavedStateHandle(),
+            app,
+            app.container.projectRepository,
+            app.container.mediaRepository,
+        )
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    val playback by vm.playback.collectAsStateWithLifecycle()
+    val player by vm.player.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
     // STEP 2: Show the ViewModel's messages as snackbars.
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
-    // STEP 3: Pickers.
+    // STEP 3: Pause when the app leaves the screen (home button, a call,
+    // screen off).
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.pausePlayback() }
+
+    // STEP 4: Pickers.
     // - Photo Picker: Android's built-in gallery picker for videos + photos.
     //   It needs no permission. On older phones Google Play services
     //   provides it automatically.
@@ -102,19 +117,27 @@ fun EditorScreen(onBack: () -> Unit) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                // STEP 4: Loading / missing project.
+                // STEP 5: Loading / missing project.
                 state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.notFound -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("This project no longer exists.")
                     TextButton(onClick = onBack) { Text("Go back") }
                 }
-                // STEP 5: The editor. The preview gets the spare space; the
-                // timeline sits under it.
+                // STEP 6: The editor. The preview gets the spare space, with
+                // the play bar and timeline under it.
                 else -> Column(Modifier.fillMaxSize()) {
                     PreviewPane(
-                        totalDurationMs = state.timeline.durationMs,
+                        player = player,
+                        playback = playback,
                         isEmpty = state.timeline.isEmpty,
+                        onTogglePlay = vm::togglePlay,
                         modifier = Modifier.weight(1f),
+                    )
+                    PlaybackBar(
+                        playback = playback,
+                        enabled = player != null,
+                        onTogglePlay = vm::togglePlay,
+                        onSeek = vm::seekTo,
                     )
                     if (state.importingCount > 0) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
