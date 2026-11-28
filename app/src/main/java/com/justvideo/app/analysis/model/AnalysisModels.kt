@@ -52,6 +52,8 @@ data class Features(
     val sceneCut: FloatArray,      // 1 = a cut happened in this second
     val faces: FloatArray,         // number of faces seen
     val closeUp: FloatArray,       // size of the biggest face (fraction of the frame)
+    /** Horizontal centre of the biggest face (0 = left, 1 = right; 0.5 if none). For auto-reframe. */
+    val faceCenterX: FloatArray = FloatArray(0),
 ) {
     val seconds: Int get() = loudness.size
 

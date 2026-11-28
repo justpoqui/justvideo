@@ -51,7 +51,7 @@ object CreateCatalog {
         CreateCategory(
             id = "shorts", title = "Shorts & social",
             description = "Auto Highlights: long video → ranked 10–15 s vertical clips",
-            icon = Icons.Rounded.AutoAwesome, action = CreateAction.AUTO_HIGHLIGHTS, status = "Phase 2",
+            icon = Icons.Rounded.AutoAwesome, action = CreateAction.AUTO_HIGHLIGHTS, status = "Ready",
         ),
         CreateCategory(
             id = "explainer", title = "Explainers",

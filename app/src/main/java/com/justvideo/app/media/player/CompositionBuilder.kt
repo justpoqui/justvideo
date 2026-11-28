@@ -4,6 +4,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.Presentation
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -13,6 +14,7 @@ import com.justvideo.app.data.model.CanvasFormat
 import com.justvideo.app.data.model.Clip
 import com.justvideo.app.data.model.MediaKind
 import com.justvideo.app.data.model.Timeline
+import com.justvideo.app.media.captions.CaptionOverlay
 
 // =====================================================================
 // CompositionBuilder.kt
@@ -33,25 +35,22 @@ object CompositionBuilder {
      * video/photo yet (nothing to show).
      *
      * @param output For EXPORT: the exact pixel size of the file. For
-     *   PREVIEW (null): only the canvas shape is applied, at the clips'
-     *   own resolution, which is cheaper for the phone to show live.
+     *   PREVIEW (null): the canvas at half size, cheaper to show live.
      */
     fun build(timeline: Timeline, output: CanvasFormat? = null): Composition? {
         if (timeline.videoClips.isEmpty()) return null
 
         // Every clip is fitted into the canvas (black bars where the shape
         // differs), so mixed portrait/landscape clips line up.
-        val fit = if (output != null) {
-            Presentation.createForWidthAndHeight(output.width, output.height, Presentation.LAYOUT_SCALE_TO_FIT)
-        } else {
-            Presentation.createForAspectRatio(timeline.canvas.aspectRatio, Presentation.LAYOUT_SCALE_TO_FIT)
-        }
-        val effects = Effects(emptyList(), listOf(fit))
+        // Preview renders at half size: cheaper to show live, same layout.
+        val (outW, outH) = if (output != null) output.width to output.height
+        else timeline.canvas.width / 2 to timeline.canvas.height / 2
+        val fit = Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT)
 
         // Main track: video + its sound. Declaring both track types means
         // Media3 fills silence for photos and silent videos automatically.
         val main = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO))
-            .addItems(timeline.videoClips.map { visualItem(it, effects) })
+            .addItems(timeline.videoClips.map { visualItem(it, videoEffects(it, timeline, fit, outW)) })
             .build()
 
         // Audio track (music etc.), mixed on top of the main track's sound.
@@ -70,6 +69,18 @@ object CompositionBuilder {
             // the export play correctly everywhere, including every social app.
             .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
             .build()
+    }
+
+    // STEP 1b: Per-clip picture effects, in order: fit into the canvas,
+    // then burned-in captions on top.
+    private fun videoEffects(clip: Clip, timeline: Timeline, fit: Presentation, outW: Int): Effects {
+        val list = mutableListOf<androidx.media3.common.Effect>(fit)
+        if (timeline.showCaptions && clip.captions.isNotEmpty()) {
+            // The item's frame times start at 0 at the trim point, so shift by
+            // trimStart to get back to the source time the words use.
+            list += OverlayEffect(listOf(CaptionOverlay(clip.captions, outW, timeOffsetMs = clip.trimStartMs)))
+        }
+        return Effects(emptyList(), list)
     }
 
     // STEP 2: A video clip, or a photo shown for its duration.

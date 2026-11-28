@@ -130,4 +130,8 @@ class FloatList(initial: Int = 1024) {
     }
 
     fun toArray(): FloatArray = data.copyOf(size)
+
+    fun clear() {
+        size = 0
+    }
 }

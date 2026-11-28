@@ -16,6 +16,8 @@ data class Timeline(
     val audioClips: List<Clip> = emptyList(),
     /** Shape of the finished video. New projects are vertical (short-form first). */
     val canvas: CanvasFormat = CanvasFormat.VERTICAL,
+    /** Burn the clips' captions into the video (preview + export). */
+    val showCaptions: Boolean = true,
 ) {
     // STEP 1: Total length = the video track's length.
     // The export stops where the video stops, and music past that is cut off.

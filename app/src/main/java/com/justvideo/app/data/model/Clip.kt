@@ -1,5 +1,6 @@
 package com.justvideo.app.data.model
 
+import com.justvideo.app.media.captions.CaptionWord
 import kotlinx.serialization.Serializable
 
 // =====================================================================
@@ -44,6 +45,11 @@ data class Clip(
      * Video-track clips play back-to-back, so for them this is ignored.
      */
     val timelineOffsetMs: Long = 0,
+    /**
+     * Caption words for this clip, in the SOURCE file's time. Stored per clip,
+     * so trimming, splitting or moving the clip keeps captions in sync.
+     */
+    val captions: List<CaptionWord> = emptyList(),
 ) {
     /** How long the clip plays on the timeline. */
     val durationMs: Long get() = trimEndMs - trimStartMs

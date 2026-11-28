@@ -65,4 +65,13 @@ class AppSmokeTest {
         compose.onNodeWithText("What do you want to make?").assertIsDisplayed()
         compose.onNodeWithText("Edit a video").assertIsDisplayed()
     }
+
+    // STEP 5: Auto Highlights opens, with the video picker button and its settings.
+    @Test
+    fun autoHighlightsOpens() {
+        compose.onNodeWithText("Auto Highlights").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Choose a long video")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Highlight settings").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Preset")).fetchSemanticsNodes().isNotEmpty() }
+    }
 }

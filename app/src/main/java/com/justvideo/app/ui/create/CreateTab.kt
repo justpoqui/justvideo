@@ -59,7 +59,7 @@ fun CreateTab(onCategory: (CreateCategory) -> Unit, modifier: Modifier = Modifie
 
 @Composable
 private fun CategoryTile(c: CreateCategory, onClick: () -> Unit) {
-    val ready = c.action == CreateAction.NEW_PROJECT
+    val ready = c.status == "Ready"
     Column(
         Modifier
             .fillMaxWidth()

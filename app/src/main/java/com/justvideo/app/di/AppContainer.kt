@@ -2,6 +2,9 @@ package com.justvideo.app.di
 
 import android.content.Context
 import com.justvideo.app.BuildConfig
+import com.justvideo.app.analysis.AnalysisManager
+import com.justvideo.app.analysis.AnalysisStore
+import com.justvideo.app.analysis.speech.SpeechModelManager
 import com.justvideo.app.core.update.GitHubReleaseClient
 import com.justvideo.app.core.update.UpdateDownloader
 import com.justvideo.app.core.update.UpdateInstaller
@@ -37,7 +40,13 @@ class AppContainer(context: Context) {
     // STEP 4: Exports (one queue for the whole app; ExportService does the work).
     val exportManager by lazy { ExportManager(appContext) }
 
-    // STEP 5: The in-app updater (checks this app's GitHub Releases page).
+    // STEP 5: Auto Highlights: speech model files, cache/settings, and the
+    // background analysis desk.
+    val speechModels by lazy { SpeechModelManager(appContext) }
+    val analysisStore by lazy { AnalysisStore(appContext, database.highlightDao()) }
+    val analysisManager by lazy { AnalysisManager(appContext) }
+
+    // STEP 6: The in-app updater (checks this app's GitHub Releases page).
     val updateManager by lazy {
         UpdateManager(
             context = appContext,

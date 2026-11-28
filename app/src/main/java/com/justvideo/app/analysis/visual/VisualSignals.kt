@@ -18,6 +18,7 @@ class VisualSignals(private val seconds: Int) {
     val sceneCut = FloatArray(seconds)
     val faces = FloatArray(seconds)
     val closeUp = FloatArray(seconds)
+    val faceCenterX = FloatArray(seconds) { 0.5f }
 
     private var prevLuma: ByteArray? = null
     private var prevHist: FloatArray? = null
@@ -25,7 +26,7 @@ class VisualSignals(private val seconds: Int) {
 
     // STEP 1: One sampled frame: tiny greyscale image (e.g. 64×36), plus
     // the face results for it.
-    fun addFrame(timeMs: Long, luma: ByteArray, faceCount: Int, biggestFaceFraction: Float) {
+    fun addFrame(timeMs: Long, luma: ByteArray, faceCount: Int, biggestFaceFraction: Float, faceX: Float = 0.5f) {
         val s = (timeMs / 1000).toInt()
         if (s !in 0 until seconds) return
         val hist = histogram(luma)
@@ -38,6 +39,7 @@ class VisualSignals(private val seconds: Int) {
             if (diff > 0.25f && histDist > 0.35f) sceneCut[s] = 1f
         }
         faces[s] = maxOf(faces[s], faceCount.toFloat())
+        if (biggestFaceFraction >= closeUp[s] && faceCount > 0) faceCenterX[s] = faceX
         closeUp[s] = maxOf(closeUp[s], biggestFaceFraction)
         prevLuma = luma
         prevHist = hist

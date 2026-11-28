@@ -99,6 +99,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // Compress native libraries inside the APK: the update download is much
+    // smaller (they're unpacked once on install).
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true // gives us BuildConfig.VERSION_CODE etc. in code
@@ -143,6 +149,12 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.effect)
     implementation(libs.media3.ui.compose)
+
+    // On-device AI for Auto Highlights:
+    // - ML Kit face detection (model bundled in the app: works offline)
+    // - MediaPipe LLM Inference (optional Gemma rating, off by default; you supply the model file)
+    implementation(libs.mlkit.face.detection)
+    implementation(libs.mediapipe.genai)
 
     // JSON + coroutines
     implementation(libs.kotlinx.serialization.json)

@@ -13,3 +13,9 @@ data object HomeRoute
 
 @Serializable
 data class EditorRoute(val projectId: String)
+
+@Serializable
+data object HighlightsRoute
+
+@Serializable
+data object HighlightSettingsRoute

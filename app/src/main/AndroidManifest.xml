@@ -7,8 +7,9 @@
   - Audio comes from the system file picker.
   Both grant access to only the files you pick.
 
-  Network is used for ONE thing only: the in-app updater, which checks this
-  app's GitHub Releases page. Editing and AI features stay fully offline.
+  Network is used for only two things: the in-app updater (checks this app's
+  GitHub Releases page) and the ONE-TIME download of the speech model.
+  Editing and all AI processing run fully offline on the phone.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -22,6 +23,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the CPU awake while Auto Highlights analyzes with the screen off. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Only Android 8–9 need this to save into the gallery. Newer versions don't. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -51,6 +54,12 @@
         <!-- Renders exports in the background (hardware encoder, progress notification). -->
         <service
             android:name=".media.export.ExportService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing|dataSync" />
+
+        <!-- Auto Highlights analysis (audio, speech, visual) in the background. -->
+        <service
+            android:name=".analysis.AnalysisService"
             android:exported="false"
             android:foregroundServiceType="mediaProcessing|dataSync" />
 

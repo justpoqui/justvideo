@@ -71,7 +71,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenProject: (String) -> Unit) {
+fun HomeScreen(onOpenProject: (String) -> Unit, onOpenHighlights: () -> Unit = {}) {
     // STEP 1: Get the ViewModel (built with the shared repositories) and
     // the app-wide updater.
     val context = LocalContext.current
@@ -179,7 +179,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
                 onCategory = { c ->
                     when (c.action) {
                         CreateAction.NEW_PROJECT -> newProject()
-                        CreateAction.AUTO_HIGHLIGHTS -> say("Auto Highlights arrives in Phase 2")
+                        CreateAction.AUTO_HIGHLIGHTS -> onOpenHighlights()
                         CreateAction.COMING_SOON -> say("${c.title}: ${c.description}. Coming in ${c.status}")
                     }
                 },
@@ -212,7 +212,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
             }
 
             // STEP 9: The headline feature button.
-            item { AutoHighlightsCard(onClick = { say("Auto Highlights arrives in Phase 2") }) }
+            item { AutoHighlightsCard(onClick = onOpenHighlights) }
 
             // STEP 10: New project → create it in the database, then open the editor.
             item {

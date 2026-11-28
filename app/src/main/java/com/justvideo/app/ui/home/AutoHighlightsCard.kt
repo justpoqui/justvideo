@@ -29,7 +29,7 @@ import com.justvideo.app.ui.theme.Violet
 // =====================================================================
 // AutoHighlightsCard.kt
 // The big "Auto Highlights" button at the top of Home.
-// Phase 1: it only explains that the feature is coming in Phase 2.
+// Opens the Auto Highlights screen.
 // =====================================================================
 
 @Composable
@@ -51,7 +51,7 @@ fun AutoHighlightsCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Column {
             Text("Auto Highlights", style = MaterialTheme.typography.titleLarge, color = Color.White)
             Text(
-                "Turn a long video into ready-to-post clips. Coming in Phase 2",
+                "Turn a long video into ready-to-post 10–15 s clips, automatically",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.85f),
             )
