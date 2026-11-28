@@ -125,9 +125,10 @@ class EditorViewModel(
         }
     }
 
-    // STEP 8: Tap a clip to select it, tap it again to deselect.
-    fun onClipTapped(clipId: String) {
-        _state.update { it.copy(selectedClipId = if (it.selectedClipId == clipId) null else clipId) }
+    // STEP 8: Tap a clip to select it. Tapping it again, or tapping empty
+    // space (null), deselects.
+    fun onClipTapped(clipId: String?) {
+        _state.update { it.copy(selectedClipId = if (clipId == null || it.selectedClipId == clipId) null else clipId) }
     }
 
     fun deleteSelected() {
@@ -139,6 +140,9 @@ class EditorViewModel(
     // STEP 9: Playback controls (forwarded to the player).
     fun togglePlay() = preview.togglePlay()
     fun seekTo(ms: Long) = preview.seekTo(ms)
+
+    /** You started dragging or pinching the timeline: pause, like CapCut does. */
+    fun onScrubStart() = preview.pause()
 
     /** Called when the app goes to the background: never keep playing unseen. */
     fun pausePlayback() = preview.pause()

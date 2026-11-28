@@ -25,10 +25,13 @@ class JustVideoApp : Application() {
         AppLog.i("App", "JustVideo started")
     }
 
-    // STEP 3: Android is low on memory. Phase 1 has no caches yet; the
-    // thumbnail cache (step 5) will empty itself here.
+    // STEP 3: Android is low on memory: empty the thumbnail cache (the
+    // pictures reload as needed). Level 15+ means memory is getting tight or
+    // the app went to the background.
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         AppLog.w("App", "onTrimMemory level=$level")
+        @Suppress("DEPRECATION")
+        if (level >= TRIM_MEMORY_RUNNING_LOW) container.thumbnailLoader.clear()
     }
 }

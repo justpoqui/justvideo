@@ -28,8 +28,8 @@ android {
         targetSdk = 37
         // STEP 2: Bump versionCode on every build we hand out, so Android
         // accepts it as an update over the previous install.
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.3.0"
 
         // STEP 2b: Where the in-app updater looks for new builds:
         // the GitHub Releases page of this (public) repository.

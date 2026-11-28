@@ -14,10 +14,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -26,6 +28,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -35,6 +39,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,13 +56,17 @@ import com.justvideo.app.JustVideoApp
 import com.justvideo.app.core.AppLog
 import com.justvideo.app.core.update.UpdateState
 import com.justvideo.app.ui.common.ReportDialog
+import com.justvideo.app.ui.create.CreateAction
+import com.justvideo.app.ui.create.CreateTab
 import com.justvideo.app.ui.update.UpdateBanner
 import kotlinx.coroutines.launch
 
 // =====================================================================
 // HomeScreen.kt
-// First screen: update banner (when there is one), Auto Highlights,
-// New Project, and your saved projects.
+// First screen, with two tabs at the bottom:
+// - Projects: update banner (when there is one), Auto Highlights,
+//   New project, and your saved projects.
+// - Create: tiles for each kind of video you can make.
 // =====================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,14 +84,33 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
-    // STEP 2: Which popup is open (saved across rotation).
+    // STEP 2: Screen state (saved across rotation): which tab, which popup.
+    var tab by rememberSaveable { mutableIntStateOf(0) } // 0 = Projects, 1 = Create
     var renameId by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
     var showDiagnostics by rememberSaveable { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
 
-    // STEP 3: A manual "Check for updates" that finds nothing (or fails
+    // STEP 3: Shared actions used by both tabs.
+    fun say(msg: String) {
+        scope.launch { snackbar.showSnackbar(msg) }
+    }
+
+    fun newProject() {
+        if (creating) return
+        creating = true
+        vm.createProject(
+            onCreated = { id -> creating = false; onOpenProject(id) },
+            onFailed = { e ->
+                creating = false
+                AppLog.e("Home", "createProject failed", e)
+                say("Couldn't create project: ${e.message}")
+            },
+        )
+    }
+
+    // STEP 4: A manual "Check for updates" that finds nothing (or fails
     // without finding a build) is reported as a short snackbar.
     LaunchedEffect(updateState) {
         when (val s = updateState) {
@@ -102,7 +130,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
                 title = { Text("JustVideo") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
-                    // STEP 4: ⋮ menu: check for updates, Diagnostics (the app
+                    // STEP 5: ⋮ menu: check for updates, Diagnostics (the app
                     // log, for sending to me), and the installed version.
                     Box {
                         IconButton(onClick = { menuOpen = true }) { Icon(Icons.Rounded.MoreVert, "Menu") }
@@ -128,8 +156,37 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
                 },
             )
         },
+        // STEP 6: Bottom tabs.
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBarItem(
+                    selected = tab == 0, onClick = { tab = 0 },
+                    icon = { Icon(Icons.Rounded.VideoLibrary, null) }, label = { Text("Projects") },
+                )
+                NavigationBarItem(
+                    selected = tab == 1, onClick = { tab = 1 },
+                    icon = { Icon(Icons.Rounded.AddCircle, null) }, label = { Text("Create") },
+                )
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
+        if (tab == 1) {
+            // STEP 7: Create tab. Ready tiles start a project, and the rest
+            // say what's coming.
+            CreateTab(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                onCategory = { c ->
+                    when (c.action) {
+                        CreateAction.NEW_PROJECT -> newProject()
+                        CreateAction.AUTO_HIGHLIGHTS -> say("Auto Highlights arrives in Phase 2")
+                        CreateAction.COMING_SOON -> say("${c.title}: ${c.description}. Coming in ${c.status}")
+                    }
+                },
+            )
+            return@Scaffold
+        }
+
         LazyColumn(
             Modifier
                 .fillMaxSize()
@@ -137,7 +194,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // STEP 5: Update banner. It only takes up space when there's
+            // STEP 8: Update banner. It only takes up space when there's
             // something to show.
             item {
                 UpdateBanner(
@@ -154,28 +211,13 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
                 )
             }
 
-            // STEP 6: The headline feature button.
-            item {
-                AutoHighlightsCard(onClick = {
-                    scope.launch { snackbar.showSnackbar("Auto Highlights arrives in Phase 2") }
-                })
-            }
+            // STEP 9: The headline feature button.
+            item { AutoHighlightsCard(onClick = { say("Auto Highlights arrives in Phase 2") }) }
 
-            // STEP 7: New project → create it in the database, then open the editor.
+            // STEP 10: New project → create it in the database, then open the editor.
             item {
                 Button(
-                    onClick = {
-                        if (creating) return@Button
-                        creating = true
-                        vm.createProject(
-                            onCreated = { id -> creating = false; onOpenProject(id) },
-                            onFailed = { e ->
-                                creating = false
-                                AppLog.e("Home", "createProject failed", e)
-                                scope.launch { snackbar.showSnackbar("Couldn't create project: ${e.message}") }
-                            },
-                        )
-                    },
+                    onClick = ::newProject,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),
@@ -194,7 +236,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
                 )
             }
 
-            // STEP 8: The project list (or a loading spinner / empty message).
+            // STEP 11: The project list (or a loading spinner / empty message).
             val projects = state.projects
             when {
                 projects == null -> item {
@@ -221,7 +263,7 @@ fun HomeScreen(onOpenProject: (String) -> Unit) {
         }
     }
 
-    // STEP 9: Popups.
+    // STEP 12: Popups.
     val list = state.projects.orEmpty()
     list.firstOrNull { it.id == renameId }?.let { p ->
         RenameProjectDialog(

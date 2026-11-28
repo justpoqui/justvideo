@@ -44,6 +44,7 @@ class AppSmokeTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Media")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Audio") and hasClickAction()).assertIsDisplayed() // the tool, not the track label
         compose.onNodeWithText("Add a video", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Timeline").assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("0 clips", substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -55,5 +56,13 @@ class AppSmokeTest {
         compose.onNodeWithContentDescription("Menu").performClick()
         compose.onNodeWithText("Diagnostics").performClick()
         compose.onNodeWithText("Copy").assertIsDisplayed()
+    }
+
+    // STEP 4: The Create tab lists the categories.
+    @Test
+    fun createTabShowsCategories() {
+        compose.onNodeWithText("Create").performClick()
+        compose.onNodeWithText("What do you want to make?").assertIsDisplayed()
+        compose.onNodeWithText("Edit a video").assertIsDisplayed()
     }
 }

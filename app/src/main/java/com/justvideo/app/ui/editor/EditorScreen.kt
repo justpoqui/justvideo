@@ -40,12 +40,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.justvideo.app.JustVideoApp
 import com.justvideo.app.ui.editor.preview.PlaybackBar
 import com.justvideo.app.ui.editor.preview.PreviewPane
-import com.justvideo.app.ui.editor.timeline.SimpleTrackList
+import com.justvideo.app.ui.editor.timeline.TimelineView
 import com.justvideo.app.ui.editor.toolbar.EditorToolbar
 
 // =====================================================================
 // EditorScreen.kt
-// CapCut-style layout: preview on top, play bar, timeline in the middle,
+// CapCut-style layout: preview on top, play bar, zoomable timeline in the middle,
 // tools at the bottom. This file only arranges the parts. Each part is
 // its own file.
 // =====================================================================
@@ -142,9 +142,15 @@ fun EditorScreen(onBack: () -> Unit) {
                     if (state.importingCount > 0) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                     }
-                    SimpleTrackList(
+                    // The zoomable timeline (drag = scrub, pinch = zoom, tap = select).
+                    TimelineView(
                         timeline = state.timeline,
+                        playheadMs = playback.positionMs,
+                        isPlaying = playback.isPlaying,
                         selectedClipId = state.selectedClipId,
+                        thumbnails = app.container.thumbnailLoader,
+                        onScrub = vm::seekTo,
+                        onScrubStart = vm::onScrubStart,
                         onClipTapped = vm::onClipTapped,
                     )
                 }

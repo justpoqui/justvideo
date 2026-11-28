@@ -9,6 +9,7 @@ import com.justvideo.app.core.update.UpdateManager
 import com.justvideo.app.data.db.AppDatabase
 import com.justvideo.app.data.repo.MediaRepository
 import com.justvideo.app.data.repo.ProjectRepository
+import com.justvideo.app.media.thumbs.ThumbnailLoader
 
 // =====================================================================
 // AppContainer.kt
@@ -29,7 +30,10 @@ class AppContainer(context: Context) {
     val mediaRepository by lazy { MediaRepository(appContext) }
     val projectRepository by lazy { ProjectRepository(database.projectDao(), mediaRepository) }
 
-    // STEP 3: The in-app updater (checks this app's GitHub Releases page).
+    // STEP 3: Timeline thumbnails, shared by every screen (one memory-capped cache).
+    val thumbnailLoader by lazy { ThumbnailLoader(appContext) }
+
+    // STEP 4: The in-app updater (checks this app's GitHub Releases page).
     val updateManager by lazy {
         UpdateManager(
             context = appContext,
