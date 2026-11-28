@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,6 +29,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +46,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.justvideo.app.JustVideoApp
+import com.justvideo.app.data.model.CanvasFormat
+import com.justvideo.app.ui.export.ExportSheet
+import kotlinx.coroutines.launch
 import com.justvideo.app.ui.editor.preview.PlaybackBar
 import com.justvideo.app.ui.editor.preview.PreviewPane
 import com.justvideo.app.ui.editor.timeline.TimelineView
@@ -71,6 +80,9 @@ fun EditorScreen(onBack: () -> Unit) {
     val player by vm.player.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val haptics = LocalHapticFeedback.current
+    var canvasMenu by remember { mutableStateOf(false) }
+    var showExport by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     // STEP 2: Show the ViewModel's messages as snackbars.
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -92,6 +104,19 @@ fun EditorScreen(onBack: () -> Unit) {
         vm.onAudioPicked(it)
     }
 
+    // STEP 4b: The export panel.
+    if (showExport) {
+        LaunchedEffect(Unit) { vm.pausePlayback() }
+        ExportSheet(
+            manager = app.container.exportManager,
+            makeJob = vm::exportJob,
+            defaultFormat = state.timeline.canvas,
+            durationMs = state.timeline.durationMs,
+            onDismiss = { showExport = false },
+            onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -100,8 +125,19 @@ fun EditorScreen(onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                 },
                 actions = {
-                    // Export is built in step 7.
-                    Button(onClick = {}, enabled = false) { Text("Export") }
+                    // Canvas shape picker, e.g. "9:16 ▾".
+                    Box {
+                        TextButton(onClick = { canvasMenu = true }) { Text("${state.timeline.canvas.label} ▾") }
+                        DropdownMenu(expanded = canvasMenu, onDismissRequest = { canvasMenu = false }) {
+                            CanvasFormat.entries.forEach { f ->
+                                DropdownMenuItem(
+                                    text = { Text("${f.label}  ·  ${f.use}") },
+                                    onClick = { canvasMenu = false; vm.setCanvas(f) },
+                                )
+                            }
+                        }
+                    }
+                    Button(onClick = { showExport = true }, enabled = state.timeline.videoClips.isNotEmpty()) { Text("Export") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )

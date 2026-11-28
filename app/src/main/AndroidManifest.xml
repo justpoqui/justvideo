@@ -16,6 +16,17 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Export + Auto Highlights run as foreground services (with a progress notification),
+         so they keep going when you leave the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Only Android 8–9 need this to save into the gallery. Newer versions don't. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:name=".JustVideoApp"
         android:allowBackup="false"
@@ -36,6 +47,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Renders exports in the background (hardware encoder, progress notification). -->
+        <service
+            android:name=".media.export.ExportService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing|dataSync" />
 
         <!-- Receives the result of installing an update (success, needs confirmation, or failed).
              Not exported: only Android's installer, through our own PendingIntent, can reach it. -->

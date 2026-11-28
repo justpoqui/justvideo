@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 // =====================================================================
 // Timeline.kt
 // Everything you have edited in one project.
-// Phase 1: one main video track + one audio track.
+// Phase 1: one main video track + one audio track, and the canvas shape.
 // =====================================================================
 
 @Serializable
@@ -14,6 +14,8 @@ data class Timeline(
     val videoClips: List<Clip> = emptyList(),
     /** Audio clips. Each one sits at its own timelineOffsetMs. */
     val audioClips: List<Clip> = emptyList(),
+    /** Shape of the finished video. New projects are vertical (short-form first). */
+    val canvas: CanvasFormat = CanvasFormat.VERTICAL,
 ) {
     // STEP 1: Total length = the video track's length.
     // The export stops where the video stops, and music past that is cut off.

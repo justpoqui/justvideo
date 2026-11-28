@@ -7,12 +7,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.justvideo.app.core.AppLog
+import com.justvideo.app.data.model.CanvasFormat
 import com.justvideo.app.data.model.Clip
 import com.justvideo.app.data.model.MediaKind
 import com.justvideo.app.data.model.Timeline
 import com.justvideo.app.data.repo.MediaRepository
 import com.justvideo.app.data.repo.ProjectRepository
 import com.justvideo.app.editor.TimelineOps
+import com.justvideo.app.media.export.ExportJob
 import com.justvideo.app.media.player.PlaybackUi
 import com.justvideo.app.media.player.PreviewController
 import com.justvideo.app.ui.navigation.EditorRoute
@@ -151,6 +153,22 @@ class EditorViewModel(
     /** The timeline finished a trim, reorder or audio move. Save it. */
     fun commitEdit(newTimeline: Timeline) {
         if (newTimeline != _state.value.timeline) edit { newTimeline }
+    }
+
+    // STEP 8c: Canvas shape (9:16 / 16:9 / 1:1). The preview updates at once.
+    fun setCanvas(format: CanvasFormat) = edit { it.copy(canvas = format) }
+
+    /** The export job for this project in the chosen size (null if there's no video yet). */
+    fun exportJob(format: CanvasFormat): ExportJob? {
+        val tl = _state.value.timeline
+        if (tl.videoClips.isEmpty()) return null
+        return ExportJob(
+            id = "${projectId.take(8)}_${System.currentTimeMillis()}",
+            title = _state.value.projectName,
+            timeline = tl,
+            format = format,
+            fileBase = _state.value.projectName.replace(Regex("[^A-Za-z0-9_-]+"), "_").take(40).ifBlank { "JustVideo" },
+        )
     }
 
     fun deleteSelected() {
