@@ -1,0 +1,80 @@
+{
+  "buildFiles": [
+    "/home/user/justvideo/app/src/main/cpp/CMakeLists.txt",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/CMakeLists.txt",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/cmake/build-info.cmake",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/cmake/parakeet-config.cmake.in",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/cmake/whisper-config.cmake.in",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/ggml/CMakeLists.txt",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/ggml/cmake/common.cmake",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/ggml/cmake/ggml-config.cmake.in",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/ggml/src/CMakeLists.txt",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/ggml/src/ggml-cpu/CMakeLists.txt",
+    "/home/user/justvideo/app/src/main/cpp/whisper.cpp/src/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/opt/android-sdk/cmake/3.31.6/bin/ninja",
+      "-C",
+      "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/opt/android-sdk/cmake/3.31.6/bin/ninja",
+    "-C",
+    "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "ggml::@74253485f3a7ec30fb13": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "ggml",
+      "output": "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a/whisper.cpp/ggml/src/libggml.a"
+    },
+    "ggml-base::@74253485f3a7ec30fb13": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "ggml-base",
+      "output": "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a/whisper.cpp/ggml/src/libggml-base.a"
+    },
+    "ggml-cpu::@74253485f3a7ec30fb13": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "ggml-cpu",
+      "output": "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a/whisper.cpp/ggml/src/libggml-cpu.a"
+    },
+    "jvwhisper::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "jvwhisper",
+      "output": "/home/user/justvideo/app/build/intermediates/cxx/RelWithDebInfo/5s412f5k/obj/arm64-v8a/libjvwhisper.so",
+      "runtimeFiles": []
+    },
+    "parakeet::@a8a66f5e841e94d32cb3": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "parakeet",
+      "output": "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a/whisper.cpp/src/libparakeet.a"
+    },
+    "whisper::@a8a66f5e841e94d32cb3": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "whisper",
+      "output": "/home/user/justvideo/app/.cxx/RelWithDebInfo/5s412f5k/arm64-v8a/whisper.cpp/src/libwhisper.a"
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/opt/android-sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/opt/android-sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [
+    "c"
+  ],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

@@ -34,6 +34,20 @@ android {
         // STEP 2b: Where the in-app updater looks for new builds:
         // the GitHub Releases page of this (public) repository.
         buildConfigField("String", "UPDATE_REPO", "\"justpoqui/justvideo\"")
+
+        // STEP 2c: Native code (whisper.cpp speech-to-text) is built for
+        // 64-bit ARM only. Every phone sold since ~2017 is arm64, and this
+        // keeps the app small.
+        ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    // STEP 2d: The C++ part (app/src/main/cpp): whisper.cpp + our JNI bridge.
+    ndkVersion = "29.0.14206865"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.31.6"
+        }
     }
 
     // STEP 3: One fixed signing key, kept ONLY on the build machine
