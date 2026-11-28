@@ -6,7 +6,9 @@ Its headline feature is **Auto Highlights**: it finds the best 10–15 s moments
 ## Status
 Phase 1 (core editor): complete.
 Phase 2 (Auto Highlights): complete: audio + speech (whisper.cpp) + visual (motion, scene cuts, ML Kit faces) analysis,
-weighted scoring, snapped 10–15 s clips, Highlights screen, settings/presets, batch 9:16 export with captions.
+weighted scoring, snapped 10–15 s clips, Highlights screen, settings/presets, batch 9:16 export with captions + auto-reframe.
+Phase 3 (editing): complete: undo/redo, text, editable word-highlight captions, transitions (fade, crossfade, slide, zoom),
+volume/fades, speed 0.25–4×, crop/zoom/pan, auto-reframe (ML Kit faces), stickers and picture-in-picture.
 
 ## Create tab roadmap
 These categories are adapted from the awesome-claude-video-skills list, reworked as offline, on-device features:

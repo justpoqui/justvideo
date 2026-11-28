@@ -83,7 +83,7 @@ class ExportService : Service() {
             return
         }
         current = job
-        val composition = CompositionBuilder.build(job.timeline, job.format)
+        val composition = CompositionBuilder.build(job.timeline, job.format, this)
         if (composition == null) {
             manager.failedCount++
             runNext()

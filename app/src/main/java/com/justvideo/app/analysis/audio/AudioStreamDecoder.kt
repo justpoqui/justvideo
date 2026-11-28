@@ -19,7 +19,13 @@ import java.nio.ByteOrder
 // works the same as a 10-second one.
 // =====================================================================
 
-class AudioStreamDecoder(private val context: Context, private val uri: Uri) {
+class AudioStreamDecoder(
+    private val context: Context,
+    private val uri: Uri,
+    /** Optional range of the file to decode (ms). Default: all of it. */
+    private val fromMs: Long = 0,
+    private val toMs: Long = Long.MAX_VALUE,
+) {
 
     /**
      * STEP 1: Decode everything. [onChunk] gets 16 kHz mono samples (-1..1),
@@ -36,7 +42,12 @@ class AudioStreamDecoder(private val context: Context, private val uri: Uri) {
             } ?: return false
             extractor.selectTrack(track)
             val format = extractor.getTrackFormat(track)
-            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+            val fileUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+            // Range: jump to the start; progress is measured over the range.
+            if (fromMs > 0) extractor.seekTo(fromMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            val endUs = if (toMs == Long.MAX_VALUE) fileUs else minOf(fileUs.takeIf { it > 0 } ?: Long.MAX_VALUE, toMs * 1000)
+            val startUs = fromMs * 1000
+            val durationUs = (endUs - startUs).coerceAtLeast(0)
             var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             var rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             var floatPcm = false
@@ -57,7 +68,7 @@ class AudioStreamDecoder(private val context: Context, private val uri: Uri) {
                     if (inIndex >= 0) {
                         val buf = codec.getInputBuffer(inIndex)!!
                         val size = extractor.readSampleData(buf, 0)
-                        if (size < 0) {
+                        if (size < 0 || (toMs != Long.MAX_VALUE && extractor.sampleTime > toMs * 1000)) {
                             codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             inputDone = true
                         } else {
@@ -90,9 +101,12 @@ class AudioStreamDecoder(private val context: Context, private val uri: Uri) {
                             for (i in 0 until count) scratch[i] = sb.get(i) / 32768f
                         }
                         codec.releaseOutputBuffer(outIndex, false)
-                        val mono = resampler.process(scratch, count)
-                        if (mono.isNotEmpty()) onChunk(mono)
-                        if (durationUs > 0) onProgress((info.presentationTimeUs.toFloat() / durationUs).coerceIn(0f, 1f))
+                        // Skip audio from before the range start (the seek lands a bit early).
+                        if (info.presentationTimeUs >= startUs || startUs == 0L) {
+                            val mono = resampler.process(scratch, count)
+                            if (mono.isNotEmpty()) onChunk(mono)
+                        }
+                        if (durationUs > 0) onProgress(((info.presentationTimeUs - startUs).toFloat() / durationUs).coerceIn(0f, 1f))
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                     }
                 }

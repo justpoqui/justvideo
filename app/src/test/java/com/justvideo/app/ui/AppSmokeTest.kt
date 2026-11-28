@@ -74,4 +74,15 @@ class AppSmokeTest {
         compose.onNodeWithContentDescription("Highlight settings").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Preset")).fetchSemanticsNodes().isNotEmpty() }
     }
+
+    // STEP 6: Editor tools: Text opens its dialog; Undo/Redo are there.
+    @Test
+    fun editorTextToolAndUndo() {
+        compose.onNode(newProjectButton).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Media")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Undo").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Redo").assertIsDisplayed()
+        compose.onNode(hasText("Text") and hasClickAction()).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Add text")).fetchSemanticsNodes().isNotEmpty() }
+    }
 }

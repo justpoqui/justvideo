@@ -34,17 +34,18 @@ object AudioLayout {
             val placedAt = maxOf(clip.timelineOffsetMs, cursor)
 
             // STEP 2: If this clip overlaps the previous one, skip its start.
+            // (Timeline time × speed = source time.)
             val skipped = placedAt - clip.timelineOffsetMs
-            val start = clip.trimStartMs + skipped
+            val start = clip.trimStartMs + (skipped * clip.speed).toLong()
             if (start >= clip.trimEndMs) continue
 
             // STEP 3: Cut it off where the video ends.
             val room = videoEnd - placedAt
-            val end = minOf(clip.trimEndMs, start + room)
+            val end = minOf(clip.trimEndMs, start + (room * clip.speed).toLong())
             if (end <= start) continue
 
             out += AudioSegment(gapBeforeMs = placedAt - cursor, clip = clip, startMs = start, endMs = end)
-            cursor = placedAt + (end - start)
+            cursor = placedAt + ((end - start) / clip.speed).toLong()
         }
         return out
     }

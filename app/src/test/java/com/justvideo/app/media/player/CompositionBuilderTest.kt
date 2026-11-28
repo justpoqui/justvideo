@@ -61,4 +61,34 @@ class CompositionBuilderTest {
         val mb = StorageCheck.estimateExportBytes(60_000) / (1024 * 1024)
         assertTrue("$mb MB", mb in 80..100)
     }
+
+    // A project using every Phase 3/4 feature still builds, with the extra
+    // layers (PiP video + crossfade tails) placed before the main track.
+    @Test
+    fun everythingTogetherBuilds() {
+        val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val a = clip("a", MediaKind.VIDEO, 20_000).copy(
+            speed = 2f, volume = 0.5f, fadeInMs = 500, width = 1920, height = 1080,
+            transform = com.justvideo.app.data.model.ClipTransform(scale = 1.5f, fill = true),
+            color = com.justvideo.app.data.model.ColorAdjust(brightness = 0.1f, saturation = 1.3f, filter = com.justvideo.app.data.model.FilterType.WARM),
+            captions = listOf(com.justvideo.app.media.captions.CaptionWord("Hello", 1_000, 1_400)),
+            keyframes = listOf(com.justvideo.app.data.model.Keyframe(0, 0f, 0f, 1f), com.justvideo.app.data.model.Keyframe(2_000, 0.2f, 0f, 1.2f)),
+        )
+        val b = clip("b", MediaKind.VIDEO, 10_000).copy(transitionIn = com.justvideo.app.data.model.Transition(com.justvideo.app.data.model.TransitionType.CROSSFADE, 800))
+        val p = clip("p", MediaKind.IMAGE, 3_000).copy(transitionIn = com.justvideo.app.data.model.Transition(com.justvideo.app.data.model.TransitionType.SLIDE, 500))
+        val tl = Timeline(
+            videoClips = listOf(a, b, p),
+            texts = listOf(com.justvideo.app.data.model.TextItem("t", "Title", startMs = 0, durationMs = 4_000)),
+            overlays = listOf(
+                com.justvideo.app.data.model.OverlayItem("s", com.justvideo.app.data.model.OverlayKind.STICKER, "🔥", startMs = 1_000),
+                com.justvideo.app.data.model.OverlayItem("v", com.justvideo.app.data.model.OverlayKind.VIDEO, "content://test/pip", startMs = 2_000, durationMs = 3_000, sourceDurationMs = 10_000, width = 1080, height = 1920),
+            ),
+        )
+        val c = CompositionBuilder.build(tl, CanvasFormat.VERTICAL, ctx)!!
+        // PiP layer, crossfade-tail layer, then the main track.
+        assertEquals(3, c.sequences.size)
+        assertEquals(3, c.sequences[2].editedMediaItems.size)
+        // Preview (no layers burned in) still works.
+        assertTrue(CompositionBuilder.build(tl, null, ctx, includeLayers = false) != null)
+    }
 }

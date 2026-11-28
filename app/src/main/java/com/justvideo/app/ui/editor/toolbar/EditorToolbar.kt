@@ -12,9 +12,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.CenterFocusStrong
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.Crop
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.rounded.Gradient
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PictureInPicture
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Subtitles
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Timeline
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Opacity
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,21 +42,56 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.justvideo.app.ui.editor.SelectionKind
 
 // =====================================================================
 // EditorToolbar.kt
 // The row of big tool buttons at the bottom of the editor (CapCut-style).
-// It scrolls sideways once more tools are added in later phases.
+// It changes with what's selected: nothing → "add" tools; a clip → clip
+// tools; a text or sticker → its tools. Scrolls sideways.
 // =====================================================================
+
+/** Every tool the toolbar can show. The screen decides what each one does. */
+enum class Tool(val label: String, val icon: ImageVector) {
+    MEDIA("Media", Icons.Rounded.AddPhotoAlternate),
+    AUDIO("Audio", Icons.Rounded.LibraryMusic),
+    TEXT("Text", Icons.Rounded.TextFields),
+    CAPTIONS("Captions", Icons.Rounded.Subtitles),
+    STICKER("Sticker", Icons.Rounded.EmojiEmotions),
+    OVERLAY("Overlay", Icons.Rounded.PictureInPicture),
+    SPLIT("Split", Icons.Rounded.ContentCut),
+    SPEED("Speed", Icons.Rounded.Speed),
+    VOLUME("Volume", Icons.Rounded.VolumeUp),
+    TRANSITION("Transition", Icons.Rounded.Gradient),
+    CROP("Crop", Icons.Rounded.Crop),
+    REFRAME("Reframe", Icons.Rounded.CenterFocusStrong),
+    COLOR("Color", Icons.Rounded.Palette),
+    SILENCE("Silences", Icons.Rounded.GraphicEq),
+    KEYFRAME("Keyframe", Icons.Rounded.Timeline),
+    EDIT_TEXT("Edit", Icons.Rounded.Edit),
+    STYLE("Style", Icons.Rounded.Tune),
+    OPACITY("Opacity", Icons.Rounded.Opacity),
+    DUPLICATE("Duplicate", Icons.Rounded.ContentCopy),
+    DELETE("Delete", Icons.Rounded.Delete),
+}
+
+// STEP 1: Which tools appear for each kind of selection.
+fun toolsFor(kind: SelectionKind): List<Tool> = when (kind) {
+    SelectionKind.NONE -> listOf(Tool.MEDIA, Tool.AUDIO, Tool.TEXT, Tool.CAPTIONS, Tool.STICKER, Tool.OVERLAY, Tool.SPLIT)
+    SelectionKind.VIDEO_CLIP -> listOf(
+        Tool.SPLIT, Tool.SPEED, Tool.VOLUME, Tool.TRANSITION, Tool.CROP, Tool.REFRAME, Tool.COLOR,
+        Tool.CAPTIONS, Tool.SILENCE, Tool.KEYFRAME, Tool.DUPLICATE, Tool.DELETE,
+    )
+    SelectionKind.AUDIO_CLIP -> listOf(Tool.SPLIT, Tool.SPEED, Tool.VOLUME, Tool.SILENCE, Tool.DUPLICATE, Tool.DELETE)
+    SelectionKind.TEXT -> listOf(Tool.EDIT_TEXT, Tool.STYLE, Tool.KEYFRAME, Tool.DELETE)
+    SelectionKind.OVERLAY -> listOf(Tool.OPACITY, Tool.KEYFRAME, Tool.DELETE)
+}
 
 @Composable
 fun EditorToolbar(
-    canDelete: Boolean,
+    selection: SelectionKind,
     canSplit: Boolean,
-    onAddMedia: () -> Unit,
-    onAddAudio: () -> Unit,
-    onSplit: () -> Unit,
-    onDelete: () -> Unit,
+    onTool: (Tool) -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface) {
         Row(
@@ -50,17 +101,15 @@ fun EditorToolbar(
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
-            // STEP 1: Tools. A disabled tool is faded out until it does something.
-            ToolButton(Icons.Rounded.AddPhotoAlternate, "Media", enabled = true, onClick = onAddMedia)
-            ToolButton(Icons.Rounded.LibraryMusic, "Audio", enabled = true, onClick = onAddAudio)
-            ToolButton(Icons.Rounded.ContentCut, "Split", enabled = canSplit, onClick = onSplit)
-            ToolButton(Icons.Rounded.Delete, "Delete", enabled = canDelete, onClick = onDelete)
+            for (tool in toolsFor(selection)) {
+                ToolButton(tool.icon, tool.label, enabled = tool != Tool.SPLIT || canSplit, onClick = { onTool(tool) })
+            }
         }
     }
 }
 
 // STEP 2: One tool: icon above label, at least 72×64dp so it's easy to hit
-// one-handed.
+// one-handed. A disabled tool is faded out.
 @Composable
 private fun ToolButton(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
     Column(
@@ -68,7 +117,7 @@ private fun ToolButton(icon: ImageVector, label: String, enabled: Boolean, onCli
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.35f)
-            .padding(horizontal = 18.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = label, modifier = Modifier.size(26.dp))

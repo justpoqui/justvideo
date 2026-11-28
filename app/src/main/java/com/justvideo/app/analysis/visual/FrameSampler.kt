@@ -34,7 +34,14 @@ class SampledFrame(
     val rotationDegrees: Int,
 )
 
-class FrameSampler(private val context: Context, private val uri: Uri, private val stepMs: Long = 500) {
+class FrameSampler(
+    private val context: Context,
+    private val uri: Uri,
+    private val stepMs: Long = 500,
+    /** Optional range (ms). Default: the whole video. */
+    private val fromMs: Long = 0,
+    private val toMs: Long = Long.MAX_VALUE,
+) {
 
     companion object {
         const val TINY_W = 64
@@ -69,9 +76,10 @@ class FrameSampler(private val context: Context, private val uri: Uri, private v
 
             val info = MediaCodec.BufferInfo()
             var lastKeyUs = -1L
-            var targetUs = 0L
+            var targetUs = fromMs * 1000
+            val endUs = if (toMs == Long.MAX_VALUE) durationUs else minOf(durationUs, toMs * 1000)
             // STEP 2: For each target time, jump to the keyframe at/after it.
-            while (durationUs == 0L || targetUs <= durationUs) {
+            while (endUs == 0L || targetUs <= endUs) {
                 currentCoroutineContext().ensureActive()
                 extractor.seekTo(targetUs, MediaExtractor.SEEK_TO_NEXT_SYNC)
                 var t = extractor.sampleTime
@@ -84,7 +92,8 @@ class FrameSampler(private val context: Context, private val uri: Uri, private v
                 }
                 lastKeyUs = t
                 decodeOne(codec, extractor, info)?.let { onFrame(it.copyAt(t / 1000, rotation)) }
-                if (durationUs > 0) onProgress((t.toFloat() / durationUs).coerceIn(0f, 1f))
+                if (t > endUs && endUs > 0) break
+                if (endUs > 0) onProgress(((t - fromMs * 1000).toFloat() / (endUs - fromMs * 1000).coerceAtLeast(1)).coerceIn(0f, 1f))
                 targetUs = maxOf(t + 1, targetUs + stepMs * 1000)
             }
             onProgress(1f)

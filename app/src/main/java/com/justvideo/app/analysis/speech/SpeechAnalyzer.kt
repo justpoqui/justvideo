@@ -20,6 +20,8 @@ class SpeechAnalyzer(
     private val language: String,
     private val threads: Int,
     private val sampleRate: Int = 16_000,
+    /** Where the audio being fed starts in the file (when only a range is transcribed). */
+    private val startOffsetMs: Long = 0,
 ) {
     private val chunkTarget = 60 * sampleRate      // ~60 s per whisper call
     private val searchWindow = 5 * sampleRate      // look for a quiet cut in the last 5 s
@@ -54,7 +56,7 @@ class SpeechAnalyzer(
     fun abort() = whisper.abort()
 
     private fun transcribe(pcm: FloatArray) {
-        val offsetMs = bufferStartSample * 1000 / sampleRate
+        val offsetMs = startOffsetMs + bufferStartSample * 1000 / sampleRate
         val t = System.currentTimeMillis()
         val raw = whisper.transcribe(pcm, language, threads)
         val r = TranscriptParser.parse(raw, offsetMs)

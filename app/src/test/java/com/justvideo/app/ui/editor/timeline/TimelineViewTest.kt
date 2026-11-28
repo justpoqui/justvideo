@@ -92,7 +92,7 @@ class TimelineViewTest {
             )
         }
         compose.onNodeWithContentDescription("Timeline").performTouchInput {
-            val y = 24.dp.toPx() + 28.dp.toPx() // middle of the video track
+            val y = 52.dp.toPx() + 28.dp.toPx() // middle of the video track (below ruler + layers lane)
             down(Offset(centerX, y))
             repeat(10) { moveBy(Offset(10f, 0f)) }
             up()
@@ -115,7 +115,7 @@ class TimelineViewTest {
             )
         }
         compose.onNodeWithContentDescription("Timeline").performTouchInput {
-            val y = 24.dp.toPx() + 28.dp.toPx()
+            val y = 52.dp.toPx() + 28.dp.toPx()
             down(Offset(centerX, y))
             advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
             repeat(12) { moveBy(Offset(-10.dp.toPx(), 0f)) }

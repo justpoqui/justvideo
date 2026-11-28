@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,12 +30,15 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import com.justvideo.app.data.model.Timeline
 import com.justvideo.app.media.player.PlaybackUi
 
 // =====================================================================
 // PreviewPane.kt
-// The video preview at the top of the editor. It shows the player's
-// picture, letterboxed to fit. Tap the picture to play or pause.
+// The video preview at the top of the editor: a frame in the canvas's
+// shape (9:16, 16:9 or 1:1) showing the player's picture, with the
+// text/sticker layers drawn on top (see LayerCanvas). Tap the video to
+// play or pause.
 // =====================================================================
 
 @OptIn(UnstableApi::class)
@@ -42,56 +46,51 @@ import com.justvideo.app.media.player.PlaybackUi
 fun PreviewPane(
     player: Player?,
     playback: PlaybackUi,
-    isEmpty: Boolean,
+    timeline: Timeline,
+    selectedId: String?,
     onTogglePlay: () -> Unit,
+    onSelectLayer: (String?) -> Unit,
+    onMoveLayer: (Float, Float, Float, Boolean) -> Unit,
+    onMoveLayerStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier
-            .fillMaxWidth()
-            .background(Color.Black)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null, // no ripple over the video
-                enabled = player != null,
-                onClick = onTogglePlay,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier.fillMaxWidth().background(Color.Black), contentAlignment = Alignment.Center) {
         if (player == null) {
             // STEP 1: Nothing to play yet: show a hint.
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                 Icon(Icons.Rounded.Movie, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    if (isEmpty) "Add a video, photo or audio file with the tools below"
+                    if (timeline.isEmpty) "Add a video, photo or audio file with the tools below"
                     else "Add a video or photo to see the preview",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-        } else {
-            // STEP 2: The video picture. ContentFrame keeps the right aspect
-            // ratio (Fit = whole frame visible, black bars where needed).
-            // SurfaceView is the most battery-friendly way to show video.
-            ContentFrame(
-                player = player,
-                modifier = Modifier.fillMaxSize(),
-                surfaceType = SURFACE_TYPE_SURFACE_VIEW,
-                contentScale = ContentScale.Fit,
+            return@Box
+        }
+        // STEP 2: The canvas-shaped frame: video + layers on top, sized to fit.
+        Box(
+            Modifier
+                .aspectRatio(timeline.canvas.aspectRatio, matchHeightConstraintsFirst = timeline.canvas.aspectRatio < 1f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onTogglePlay),
+            contentAlignment = Alignment.Center,
+        ) {
+            ContentFrame(player = player, modifier = Modifier.fillMaxSize(), surfaceType = SURFACE_TYPE_SURFACE_VIEW, contentScale = ContentScale.Fit)
+            LayerCanvas(
+                timeline = timeline,
+                playheadMs = playback.positionMs,
+                selectedId = selectedId,
+                onSelect = onSelectLayer,
+                onMove = onMoveLayer,
+                onMoveStart = onMoveLayerStart,
             )
-
             // STEP 3: Big play icon while paused, spinner while loading.
             when {
                 playback.isBuffering -> CircularProgressIndicator(color = Color.White)
                 !playback.isPlaying -> Icon(
-                    Icons.Rounded.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier
-                        .size(72.dp)
-                        .background(Color.Black.copy(alpha = 0.35f), MaterialTheme.shapes.extraLarge)
-                        .padding(8.dp),
+                    Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(64.dp).background(Color.Black.copy(alpha = 0.35f), MaterialTheme.shapes.extraLarge).padding(8.dp),
                 )
             }
         }

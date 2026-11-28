@@ -75,7 +75,8 @@ class PreviewController(
     fun setTimeline(timeline: Timeline) {
         if (timeline == loadedTimeline) return
         loadedTimeline = timeline
-        val composition = CompositionBuilder.build(timeline)
+        // Text/sticker/photo layers are drawn by the editor itself (so they can be dragged).
+        val composition = CompositionBuilder.build(timeline, context = context, includeLayers = false)
         if (composition == null) {
             release()
             _ui.value = PlaybackUi()

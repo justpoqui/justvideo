@@ -12,6 +12,7 @@ import com.justvideo.app.analysis.model.HighlightSettings
 import com.justvideo.app.core.AppLog
 import com.justvideo.app.data.model.CanvasFormat
 import com.justvideo.app.data.model.Clip
+import com.justvideo.app.data.model.ClipTransform
 import com.justvideo.app.data.model.MediaKind
 import com.justvideo.app.data.model.Timeline
 import com.justvideo.app.media.captions.CaptionWord
@@ -155,16 +156,25 @@ class HighlightsViewModel(app: Application) : AndroidViewModel(app) {
     // STEP 5: A clip as a one-clip timeline, with its spoken words as captions
     // (in source time, as Clip.captions expects).
     private suspend fun timelineFor(r: HighlightsResults, h: Highlight, captions: Boolean): Timeline {
+        val result = c.analysisStore.loadResult(r.key)
         val words = if (captions) {
-            c.analysisStore.loadResult(r.key)?.transcript?.wordsBetween(h.startMs, h.endMs)
-                ?.map { CaptionWord(it.text, it.startMs, it.endMs) }.orEmpty()
+            result?.transcript?.wordsBetween(h.startMs, h.endMs)?.map { CaptionWord(it.text, it.startMs, it.endMs) }.orEmpty()
         } else {
             emptyList()
         }
+        // Auto-reframe: a landscape video becomes a vertical clip that follows
+        // the face, using the face positions the analysis already measured.
+        val info = c.mediaRepository.probe(r.uri)
+        val faceX = result?.features?.faceCenterX ?: FloatArray(0)
+        val startSec = (h.startMs / 1000).toInt()
+        val endSec = ((h.endMs + 999) / 1000).toInt().coerceAtMost(faceX.size)
+        val reframe = if (startSec < endSec) faceX.copyOfRange(startSec, endSec).toList() else emptyList()
         val clip = Clip(
             id = h.id, sourceUri = r.uri.toString(), kind = MediaKind.VIDEO, displayName = r.name,
             sourceDurationMs = r.durationMs, trimStartMs = h.startMs, trimEndMs = h.endMs, hasAudio = true,
+            width = info?.width ?: 0, height = info?.height ?: 0, rotationDegrees = info?.rotationDegrees ?: 0,
             captions = words,
+            transform = ClipTransform(fill = true, autoReframe = reframe.isNotEmpty(), reframeX = reframe, reframeStartSec = startSec),
         )
         return Timeline(videoClips = listOf(clip), canvas = CanvasFormat.VERTICAL, showCaptions = captions)
     }

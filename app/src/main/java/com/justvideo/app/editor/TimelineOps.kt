@@ -3,6 +3,8 @@ package com.justvideo.app.editor
 import com.justvideo.app.data.model.Clip
 import com.justvideo.app.data.model.MediaInfo
 import com.justvideo.app.data.model.MediaKind
+import com.justvideo.app.data.model.OverlayItem
+import com.justvideo.app.data.model.TextItem
 import com.justvideo.app.data.model.Timeline
 import java.util.UUID
 
@@ -65,8 +67,8 @@ object TimelineOps {
             var start = newTrimStartMs.coerceIn(0, c.trimEndMs - MIN_CLIP_MS)
             if (c.kind == MediaKind.AUDIO) {
                 // Don't let the clip slide before 0 on the timeline.
-                start = start.coerceAtLeast(c.trimStartMs - c.timelineOffsetMs)
-                c.copy(trimStartMs = start, timelineOffsetMs = c.timelineOffsetMs + (start - c.trimStartMs))
+                start = start.coerceAtLeast(c.trimStartMs - (c.timelineOffsetMs * c.speed).toLong())
+                c.copy(trimStartMs = start, timelineOffsetMs = c.timelineOffsetMs + ((start - c.trimStartMs) / c.speed).toLong())
             } else {
                 c.copy(trimStartMs = start)
             }
@@ -87,7 +89,7 @@ object TimelineOps {
         timeline.audioClips.firstOrNull { it.id == preferredClipId }?.let { a ->
             val local = atMs - a.timelineOffsetMs
             if (local < MIN_CLIP_MS || local > a.durationMs - MIN_CLIP_MS) return timeline
-            val cut = a.trimStartMs + local
+            val cut = a.sourceTimeAt(local)
             val left = a.copy(trimEndMs = cut)
             val right = a.copy(id = idFactory(), trimStartMs = cut, timelineOffsetMs = a.timelineOffsetMs + local)
             val i = timeline.audioClips.indexOf(a)
@@ -98,9 +100,10 @@ object TimelineOps {
         val c = timeline.videoClips[index]
         val local = atMs - clipStart
         if (local < MIN_CLIP_MS || local > c.durationMs - MIN_CLIP_MS) return timeline
-        val cut = c.trimStartMs + local
+        val cut = c.sourceTimeAt(local)
+        // The transition stays on the left half (where it was); the right half just continues.
         val left = c.copy(trimEndMs = cut)
-        val right = c.copy(id = idFactory(), trimStartMs = cut)
+        val right = c.copy(id = idFactory(), trimStartMs = cut, transitionIn = com.justvideo.app.data.model.Transition())
         return timeline.copy(videoClips = timeline.videoClips.toMutableList().apply { set(index, left); add(index + 1, right) })
     }
 
@@ -121,6 +124,52 @@ object TimelineOps {
     // STEP 9: Slide an audio clip to a new place on the timeline.
     fun moveAudio(timeline: Timeline, clipId: String, newOffsetMs: Long): Timeline =
         mapClip(timeline, clipId) { it.copy(timelineOffsetMs = newOffsetMs.coerceAtLeast(0)) }
+
+    // STEP 9b: Per-clip settings (speed, volume, fades, transition,
+    // crop/zoom, colour). Each is a simple "change one clip" edit.
+    fun updateClip(timeline: Timeline, clipId: String, f: (Clip) -> Clip): Timeline = mapClip(timeline, clipId, f)
+
+    fun setSpeed(timeline: Timeline, clipId: String, speed: Float): Timeline =
+        mapClip(timeline, clipId) { it.copy(speed = speed.coerceIn(Clip.MIN_SPEED, Clip.MAX_SPEED)) }
+
+    /** Duplicate a video clip right after itself (or an audio clip right after its end). */
+    fun duplicate(timeline: Timeline, clipId: String, idFactory: () -> String = ::newId): Timeline {
+        val vi = timeline.videoClips.indexOfFirst { it.id == clipId }
+        if (vi >= 0) {
+            val copy = timeline.videoClips[vi].copy(id = idFactory())
+            return timeline.copy(videoClips = timeline.videoClips.toMutableList().apply { add(vi + 1, copy) })
+        }
+        val a = timeline.audioClips.firstOrNull { it.id == clipId } ?: return timeline
+        return timeline.copy(audioClips = timeline.audioClips + a.copy(id = idFactory(), timelineOffsetMs = a.timelineOffsetMs + a.durationMs))
+    }
+
+    // STEP 9c: Text overlays and stickers/picture-in-picture.
+    fun addText(timeline: Timeline, item: TextItem) = timeline.copy(texts = timeline.texts + item)
+    fun updateText(timeline: Timeline, id: String, f: (TextItem) -> TextItem) =
+        timeline.copy(texts = timeline.texts.map { if (it.id == id) f(it) else it })
+
+    fun addOverlay(timeline: Timeline, item: OverlayItem) = timeline.copy(overlays = timeline.overlays + item)
+    fun updateOverlay(timeline: Timeline, id: String, f: (OverlayItem) -> OverlayItem) =
+        timeline.copy(overlays = timeline.overlays.map { if (it.id == id) f(it) else it })
+
+    /** Delete anything by id: a clip, a text, or an overlay. */
+    fun deleteAny(timeline: Timeline, id: String): Timeline =
+        delete(timeline, id).let { t -> t.copy(texts = t.texts.filterNot { it.id == id }, overlays = t.overlays.filterNot { it.id == id }) }
+
+    /** Move/resize a text or overlay on the timeline (start ≥ 0, at least 300 ms long). */
+    fun retimeLayer(timeline: Timeline, id: String, startMs: Long, durationMs: Long): Timeline {
+        val s = startMs.coerceAtLeast(0)
+        val d = durationMs.coerceAtLeast(300)
+        return timeline.copy(
+            texts = timeline.texts.map { if (it.id == id) it.copy(startMs = s, durationMs = d) else it },
+            overlays = timeline.overlays.map {
+                if (it.id != id) it
+                else if (it.kind == com.justvideo.app.data.model.OverlayKind.VIDEO && it.sourceDurationMs > 0) {
+                    it.copy(startMs = s, durationMs = d.coerceAtMost(it.sourceDurationMs - it.trimStartMs))
+                } else it.copy(startMs = s, durationMs = d)
+            },
+        )
+    }
 
     // STEP 10: Helpers.
 

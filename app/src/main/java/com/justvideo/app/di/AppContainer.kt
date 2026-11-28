@@ -46,6 +46,9 @@ class AppContainer(context: Context) {
     val analysisStore by lazy { AnalysisStore(appContext, database.highlightDao()) }
     val analysisManager by lazy { AnalysisManager(appContext) }
 
+    // Editor clip tools (captions, auto-reframe, silence removal).
+    val clipTools by lazy { com.justvideo.app.editor.ClipTools(appContext, speechModels) }
+
     // STEP 6: The in-app updater (checks this app's GitHub Releases page).
     val updateManager by lazy {
         UpdateManager(
