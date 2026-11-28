@@ -131,6 +131,28 @@ class EditorViewModel(
         _state.update { it.copy(selectedClipId = if (clipId == null || it.selectedClipId == clipId) null else clipId) }
     }
 
+    // STEP 8b: Split at the playhead: the selected clip if the playhead is
+    // on it, otherwise the video clip under the playhead.
+    fun splitAtPlayhead() {
+        val at = preview.ui.value.positionMs
+        val before = _state.value.timeline
+        val after = TimelineOps.splitAt(before, at, _state.value.selectedClipId)
+        if (after == before) {
+            _messages.trySend("Move the playhead inside a clip to split it")
+            return
+        }
+        edit { after }
+    }
+
+    /** Can Split do anything right now? (Used to enable the button.) */
+    fun canSplit(positionMs: Long): Boolean =
+        TimelineOps.canSplitAt(_state.value.timeline, positionMs, _state.value.selectedClipId)
+
+    /** The timeline finished a trim, reorder or audio move. Save it. */
+    fun commitEdit(newTimeline: Timeline) {
+        if (newTimeline != _state.value.timeline) edit { newTimeline }
+    }
+
     fun deleteSelected() {
         val id = _state.value.selectedClipId ?: return
         edit { TimelineOps.delete(it, id) }

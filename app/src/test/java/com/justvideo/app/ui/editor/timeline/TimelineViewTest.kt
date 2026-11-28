@@ -1,6 +1,7 @@
 package com.justvideo.app.ui.editor.timeline
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -76,5 +77,51 @@ class TimelineViewTest {
         node.performTouchInput { click(Offset(centerX, 5f)) }
         compose.waitForIdle()
         assertEquals(null, taps.last())
+    }
+
+    // STEP 4: Drag the left handle of the selected clip → it gets trimmed.
+    @Test
+    fun draggingTheLeftHandleTrims() {
+        var committed: Timeline? = null
+        val loader = ThumbnailLoader(ApplicationProvider.getApplicationContext())
+        compose.setContent {
+            TimelineView(
+                timeline = timeline, playheadMs = 0, isPlaying = false, selectedClipId = "v1",
+                thumbnails = loader, onScrub = {}, onScrubStart = {}, onClipTapped = {},
+                onEditCommit = { committed = it },
+            )
+        }
+        compose.onNodeWithContentDescription("Timeline").performTouchInput {
+            val y = 24.dp.toPx() + 28.dp.toPx() // middle of the video track
+            down(Offset(centerX, y))
+            repeat(10) { moveBy(Offset(10f, 0f)) }
+            up()
+        }
+        compose.waitForIdle()
+        val v1 = committed!!.videoClips.first { it.id == "v1" }
+        assertTrue("trimmed ${v1.trimStartMs}", v1.trimStartMs in 1_000..2_000) // 100 px ÷ 0.07 px/ms ≈ 1.4 s
+    }
+
+    // STEP 5: Long-press a clip and drag it left → it moves to the front.
+    @Test
+    fun longPressDragReorders() {
+        var committed: Timeline? = null
+        val loader = ThumbnailLoader(ApplicationProvider.getApplicationContext())
+        compose.setContent {
+            TimelineView(
+                timeline = timeline, playheadMs = 21_000, isPlaying = false, selectedClipId = null,
+                thumbnails = loader, onScrub = {}, onScrubStart = {}, onClipTapped = {},
+                onEditCommit = { committed = it },
+            )
+        }
+        compose.onNodeWithContentDescription("Timeline").performTouchInput {
+            val y = 24.dp.toPx() + 28.dp.toPx()
+            down(Offset(centerX, y))
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            repeat(12) { moveBy(Offset(-10.dp.toPx(), 0f)) }
+            up()
+        }
+        compose.waitForIdle()
+        assertEquals(listOf("p1", "v1", "v2"), committed!!.videoClips.map { it.id })
     }
 }

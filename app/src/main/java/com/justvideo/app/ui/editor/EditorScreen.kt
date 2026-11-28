@@ -30,7 +30,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -68,6 +70,7 @@ fun EditorScreen(onBack: () -> Unit) {
     val playback by vm.playback.collectAsStateWithLifecycle()
     val player by vm.player.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val haptics = LocalHapticFeedback.current
 
     // STEP 2: Show the ViewModel's messages as snackbars.
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -106,10 +109,15 @@ fun EditorScreen(onBack: () -> Unit) {
         bottomBar = {
             EditorToolbar(
                 canDelete = state.selectedClipId != null,
+                canSplit = remember(state.timeline, state.selectedClipId, playback.positionMs) { vm.canSplit(playback.positionMs) },
                 onAddMedia = {
                     pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                 },
                 onAddAudio = { pickAudio.launch(arrayOf("audio/*")) },
+                onSplit = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    vm.splitAtPlayhead()
+                },
                 onDelete = vm::deleteSelected,
             )
         },
@@ -152,6 +160,7 @@ fun EditorScreen(onBack: () -> Unit) {
                         onScrub = vm::seekTo,
                         onScrubStart = vm::onScrubStart,
                         onClipTapped = vm::onClipTapped,
+                        onEditCommit = vm::commitEdit,
                     )
                 }
             }

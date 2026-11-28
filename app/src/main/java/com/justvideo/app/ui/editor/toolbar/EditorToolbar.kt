@@ -36,8 +36,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun EditorToolbar(
     canDelete: Boolean,
+    canSplit: Boolean,
     onAddMedia: () -> Unit,
     onAddAudio: () -> Unit,
+    onSplit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface) {
@@ -51,7 +53,7 @@ fun EditorToolbar(
             // STEP 1: Tools. A disabled tool is faded out until it does something.
             ToolButton(Icons.Rounded.AddPhotoAlternate, "Media", enabled = true, onClick = onAddMedia)
             ToolButton(Icons.Rounded.LibraryMusic, "Audio", enabled = true, onClick = onAddAudio)
-            ToolButton(Icons.Rounded.ContentCut, "Split", enabled = false, onClick = {}) // step 6
+            ToolButton(Icons.Rounded.ContentCut, "Split", enabled = canSplit, onClick = onSplit)
             ToolButton(Icons.Rounded.Delete, "Delete", enabled = canDelete, onClick = onDelete)
         }
     }

@@ -3,6 +3,7 @@ package com.justvideo.app.ui.editor.timeline
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberScrollableState
@@ -29,27 +30,38 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.justvideo.app.data.model.Clip
 import com.justvideo.app.data.model.MediaKind
 import com.justvideo.app.data.model.Timeline
+import com.justvideo.app.editor.Snapping
+import com.justvideo.app.editor.TimelineOps
 import com.justvideo.app.media.thumbs.ThumbKey
 import com.justvideo.app.media.thumbs.ThumbnailLoader
 import com.justvideo.app.ui.theme.AudioGreen
+import com.justvideo.app.ui.theme.Ink
 import com.justvideo.app.ui.theme.PanelHigh
+import com.justvideo.app.ui.theme.Teal
 import com.justvideo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 // =====================================================================
 // TimelineView.kt
@@ -59,21 +71,43 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 // Gestures:
 // - Drag sideways (with fling): scrub through the video.
 // - Pinch: zoom in/out around the playhead.
-// - Tap a clip: select it (tap again to deselect).
+// - Tap a clip: select it (tap again, or tap empty space, to deselect).
+// - Drag the white handles of the selected clip: trim it.
+// - Long-press a video clip, then drag: reorder (clips shrink to squares).
+// - Long-press an audio clip, then drag: slide it along the timeline.
+// Edges snap to the playhead and to other clips' edges, with a small
+// vibration.
 //
 // Everything is drawn on ONE Canvas, and only what's visible is drawn.
 // That keeps scrolling at 60 fps even for a 2-hour video.
 // =====================================================================
 
-// STEP 1: Row sizes.
+// STEP 1: Sizes.
 private val RulerHeight = 24.dp
 private val VideoTrackHeight = 56.dp
 private val TrackGap = 8.dp
 private val AudioTrackHeight = 36.dp
 private val TotalHeight = RulerHeight + VideoTrackHeight + TrackGap + AudioTrackHeight + 8.dp
+private val HandleWidth = 14.dp
+private val HandleTouch = 24.dp   // how far from an edge still counts as grabbing the handle
+private val SnapDistance = 10.dp  // how close an edge must get before it snaps
+private val ReorderGap = 4.dp
 
 /** Default zoom: one 56dp thumbnail ≈ 2 seconds. */
 private const val DEFAULT_PX_PER_MS = 0.07f
+
+/** What a finger is doing to a clip right now (drawn live, saved when you let go). */
+private sealed interface EditDrag {
+    val clipId: String
+
+    /** Trimming. leftShiftMs (video, left edge only): how far the left edge moved, used to draw it under your finger. */
+    data class Trim(override val clipId: String, val leftEdge: Boolean, val leftShiftMs: Long) : EditDrag
+
+    /** Reordering video: the finger's x, where slot 0 starts, and the slot it would drop into. */
+    data class Reorder(override val clipId: String, val fingerX: Float, val baseX: Float, val target: Int) : EditDrag
+
+    data class MoveAudio(override val clipId: String) : EditDrag
+}
 
 @Composable
 fun TimelineView(
@@ -86,49 +120,55 @@ fun TimelineView(
     onScrub: (Long) -> Unit,
     onScrubStart: () -> Unit,
     onClipTapped: (String?) -> Unit,
+    /** A trim/reorder/move finished: save this new timeline. */
+    onEditCommit: (Timeline) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // STEP 2: Timeline state.
-    // - position: the time under the playhead (a Double, for smooth sub-ms scrolling)
+    // - position: the time under the playhead (a Double, for smooth scrolling)
     // - zoom: pixels per millisecond (saved across rotation)
+    // - preview/drag: the edit you're making right now, before you let go
     var position by remember { mutableDoubleStateOf(playheadMs.toDouble()) }
     var zoom by rememberSaveable { mutableFloatStateOf(DEFAULT_PX_PER_MS) }
     var pinching by remember { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
-    val durationMs = timeline.durationMs.toDouble()
+    var preview by remember { mutableStateOf<Timeline?>(null) }
+    var drag by remember { mutableStateOf<EditDrag?>(null) }
+    val shown = preview ?: timeline
+
+    val latestTimeline by rememberUpdatedState(timeline)
+    val latestSelected by rememberUpdatedState(selectedClipId)
     val currentOnScrub by rememberUpdatedState(onScrub)
     val currentOnScrubStart by rememberUpdatedState(onScrubStart)
+    val currentOnCommit by rememberUpdatedState(onEditCommit)
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val tilePx = with(density) { VideoTrackHeight.toPx() }
 
     // STEP 3: Sideways drag + fling. Dragging left moves forward in time.
     // Only YOUR gestures go through here, so this is where we seek the player.
     val scrollState = rememberScrollableState { delta ->
         val before = position
-        position = (position - delta / zoom).coerceIn(0.0, durationMs)
+        position = (position - delta / zoom).coerceIn(0.0, latestTimeline.durationMs.toDouble())
         currentOnScrub(position.toLong())
-        // Report how much we actually moved, so a fling stops at the ends.
         ((before - position) * zoom).toFloat()
     }
 
     // STEP 4: Follow the player (playback, or the scrub bar) unless you are
     // touching the timeline right now.
     LaunchedEffect(playheadMs) {
-        if (!scrollState.isScrollInProgress && !pinching) position = playheadMs.toDouble()
+        if (!scrollState.isScrollInProgress && !pinching && drag == null) position = playheadMs.toDouble()
     }
-    // Starting to drag while playing pauses playback, as in CapCut.
     LaunchedEffect(scrollState) {
-        snapshotFlow { scrollState.isScrollInProgress }.distinctUntilChanged().collect { scrolling ->
-            if (scrolling) currentOnScrubStart()
-        }
+        snapshotFlow { scrollState.isScrollInProgress }.distinctUntilChanged().collect { if (it) currentOnScrubStart() }
     }
 
     // STEP 5: Ask the thumbnail loader for exactly the frames on screen.
-    // snapshotFlow re-runs this only when position/zoom/clips change, and
-    // the bucketing keeps the list identical between small scrolls.
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val tilePx = with(density) { VideoTrackHeight.toPx() }
     LaunchedEffect(thumbnails) {
         snapshotFlow {
-            visibleThumbKeys(timeline, position, zoom, size.width.toFloat(), tilePx)
+            val tl = preview ?: latestTimeline
+            visibleThumbKeys(tl, position, zoom, size.width.toFloat(), tilePx) +
+                (if (drag is EditDrag.Reorder) tl.videoClips.map { thumbKeyFor(it, 0, tilePx, zoom) } else emptyList())
         }.distinctUntilChanged().collect { thumbnails.want(it) }
     }
 
@@ -142,20 +182,20 @@ fun TimelineView(
             .height(TotalHeight)
             .semantics { contentDescription = "Timeline" }
             .onSizeChanged { size = it }
-            // STEP 6: Pinch zoom. It runs before the drag handler and takes
-            // two-finger gestures for itself, so pinching never also scrolls.
+            // STEP 6: Pinch zoom. It runs first and takes two-finger gestures
+            // for itself, so pinching never also scrolls.
             .pointerInput(Unit) {
                 awaitEachGesture {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val pressed = event.changes.count { it.pressed }
                         if (pressed == 0) break
-                        if (pressed >= 2) {
+                        if (pressed >= 2 && drag == null) {
                             if (!pinching) {
                                 pinching = true; currentOnScrubStart()
                             }
-                            val z = event.calculateZoom()
                             // We always zoom around the playhead, so the time under it stays put.
+                            val z = event.calculateZoom()
                             if (z != 1f) zoom = TimelineScale.clampZoom(zoom * z)
                             event.changes.forEach { it.consume() }
                         }
@@ -163,54 +203,194 @@ fun TimelineView(
                     pinching = false
                 }
             }
-            .scrollable(scrollState, Orientation.Horizontal)
-            // STEP 7: Tap → find which clip is under your finger.
-            .pointerInput(timeline) {
+            // STEP 7: Editing gestures (trim handles, long-press reorder/move).
+            // They also run before scrolling, and only claim the touch when
+            // it's on a handle or turns into a long-press. Otherwise the touch
+            // falls through to scroll or tap.
+            .pointerInput(Unit) {
+                val d = density.density
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val tl = latestTimeline
+                    val cx = size.width / 2f
+                    val geo = Geometry(d)
+
+                    // 7a: Grabbed a trim handle of the selected clip?
+                    val handle = handleAt(tl, latestSelected, down.position, position, zoom, cx, geo)
+                    if (handle != null) {
+                        down.consume()
+                        currentOnScrubStart()
+                        val (clip, leftEdge) = handle
+                        val clipStart = clipTimelineStart(tl, clip)
+                        var lastSnap: Long? = null
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            ev.changes.forEach { it.consume() }
+                            if (!ch.pressed) break
+                            val deltaMs = ((ch.position.x - down.position.x) / zoom).toLong()
+                            val snapPoints = snapPointsFor(tl, clip, position)
+                            val result: Timeline
+                            val shift: Long
+                            if (leftEdge) {
+                                // Edge time on screen = clip start + how far the edge moved.
+                                val edgeT = clipStart + deltaMs
+                                val s = Snapping.snap(edgeT, snapPoints, zoom, SnapDistance.value * d)
+                                if (s.snappedTo != null && s.snappedTo != lastSnap) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                lastSnap = s.snappedTo
+                                result = TimelineOps.trimStart(tl, clip.id, clip.trimStartMs + (s.timeMs - clipStart))
+                                val newClip = TimelineOps.findClip(result, clip.id)!!
+                                shift = if (clip.kind == MediaKind.AUDIO) 0 else newClip.trimStartMs - clip.trimStartMs
+                                // Show the frame at the new in-point.
+                                currentOnScrub((clipStart + shift).coerceIn(clipStart, clipStart + clip.durationMs - 1))
+                            } else {
+                                val edgeT = clipStart + clip.durationMs + deltaMs
+                                val s = Snapping.snap(edgeT, snapPoints, zoom, SnapDistance.value * d)
+                                if (s.snappedTo != null && s.snappedTo != lastSnap) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                lastSnap = s.snappedTo
+                                result = TimelineOps.trimEnd(tl, clip.id, clip.trimStartMs + (s.timeMs - clipStart))
+                                shift = 0
+                                val newClip = TimelineOps.findClip(result, clip.id)!!
+                                currentOnScrub((clipStart + newClip.durationMs).coerceIn(clipStart, clipStart + clip.durationMs - 1))
+                            }
+                            preview = result
+                            drag = EditDrag.Trim(clip.id, leftEdge, shift)
+                        }
+                        preview?.let(currentOnCommit)
+                        preview = null
+                        drag = null
+                        return@awaitEachGesture
+                    }
+
+                    // 7b: Wait to see if this becomes a long-press (finger
+                    // held still). Moving or lifting early = a normal scroll/tap.
+                    val pressedClip = clipAt(tl, down.position, position, zoom, cx, geo) ?: return@awaitEachGesture
+                    var cancelled = false
+                    withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = ev.changes.firstOrNull { it.id == down.id }
+                            if (ch == null || !ch.pressed || ev.changes.count { it.pressed } > 1 ||
+                                (ch.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            ) {
+                                cancelled = true; break
+                            }
+                        }
+                    }
+                    if (cancelled) return@awaitEachGesture
+
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    currentOnScrubStart()
+
+                    if (pressedClip.kind != MediaKind.AUDIO) {
+                        // 7c: Reorder video clips.
+                        val slot = geo.trackH + geo.reorderGap
+                        val origin = tl.videoClips.indexOfFirst { it.id == pressedClip.id }
+                        var baseX = down.position.x - origin * slot - geo.trackH / 2
+                        drag = EditDrag.Reorder(pressedClip.id, down.position.x, baseX, origin)
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            ev.changes.forEach { it.consume() }
+                            if (!ch.pressed) break
+                            val x = ch.position.x
+                            // Near the screen edge: slide the row so you can reach far clips.
+                            if (x < 48 * d) baseX += 12 * d else if (x > size.width - 48 * d) baseX -= 12 * d
+                            val target = ((x - baseX - geo.trackH / 2) / slot).roundToInt().coerceIn(0, tl.videoClips.size - 1)
+                            val prev = drag as? EditDrag.Reorder
+                            if (prev != null && prev.target != target) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            drag = EditDrag.Reorder(pressedClip.id, x, baseX, target)
+                        }
+                        val target = (drag as? EditDrag.Reorder)?.target ?: origin
+                        if (target != origin) currentOnCommit(TimelineOps.moveVideo(tl, pressedClip.id, target))
+                        drag = null
+                    } else {
+                        // 7d: Slide an audio clip, snapping its start or end.
+                        drag = EditDrag.MoveAudio(pressedClip.id)
+                        var lastSnap: Long? = null
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            ev.changes.forEach { it.consume() }
+                            if (!ch.pressed) break
+                            val raw = pressedClip.timelineOffsetMs + ((ch.position.x - down.position.x) / zoom).toLong()
+                            val points = snapPointsFor(tl, pressedClip, position)
+                            val sStart = Snapping.snap(raw, points, zoom, SnapDistance.value * d)
+                            val sEnd = Snapping.snap(raw + pressedClip.durationMs, points, zoom, SnapDistance.value * d)
+                            val offset = when {
+                                sStart.snappedTo != null -> sStart.timeMs
+                                sEnd.snappedTo != null -> sEnd.timeMs - pressedClip.durationMs
+                                else -> raw
+                            }
+                            val snapped = sStart.snappedTo ?: sEnd.snappedTo
+                            if (snapped != null && snapped != lastSnap) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            lastSnap = snapped
+                            preview = TimelineOps.moveAudio(tl, pressedClip.id, offset)
+                        }
+                        preview?.let(currentOnCommit)
+                        preview = null
+                        drag = null
+                    }
+                }
+            }
+            .scrollable(scrollState, Orientation.Horizontal, enabled = drag == null)
+            // STEP 8: Tap → find which clip is under your finger.
+            .pointerInput(Unit) {
                 detectTapGestures { tap ->
-                    onClipTapped(hitTest(timeline, tap, position, zoom, size.width / 2f, density.density))
+                    onClipTapped(clipAt(latestTimeline, tap, position, zoom, size.width / 2f, Geometry(density.density))?.id)
                 }
             },
     ) {
         val cx = this.size.width / 2f
-        val rulerH = RulerHeight.toPx()
-        val videoTop = rulerH
-        val videoH = VideoTrackHeight.toPx()
-        val audioTop = videoTop + videoH + TrackGap.toPx()
-        val audioH = AudioTrackHeight.toPx()
+        val geo = Geometry(density.density)
+        val videoTop = geo.rulerH
+        val audioTop = geo.audioTop
 
-        drawRuler(position, zoom, cx, rulerH, textMeasurer, labelStyle)
+        drawRuler(position, zoom, cx, geo.rulerH, textMeasurer, labelStyle)
 
-        // STEP 8: Video track. Clips play back to back.
-        var start = 0L
-        for (clip in timeline.videoClips) {
-            val x0 = TimelineScale.timeToX(start.toDouble(), position, cx, zoom)
-            val x1 = TimelineScale.timeToX((start + clip.durationMs).toDouble(), position, cx, zoom)
-            if (x1 >= 0 && x0 <= this.size.width) {
-                drawVideoClip(clip, x0, x1, videoTop, videoH, start, zoom, cx, thumbnails, clip.id == selectedClipId)
+        // STEP 9: Video track (or the reorder row while reordering).
+        val reorder = drag as? EditDrag.Reorder
+        if (reorder != null) {
+            drawReorderRow(shown, reorder, videoTop, geo, thumbnails, tilePx, zoom)
+        } else {
+            val trim = drag as? EditDrag.Trim
+            var start = 0L
+            var shiftPx = 0f
+            for (clip in shown.videoClips) {
+                if (trim != null && trim.clipId == clip.id && trim.leftEdge) shiftPx = trim.leftShiftMs * zoom
+                val x0 = TimelineScale.timeToX(start.toDouble(), position, cx, zoom) + shiftPx
+                val x1 = TimelineScale.timeToX((start + clip.durationMs).toDouble(), position, cx, zoom) + shiftPx
+                if (x1 >= 0 && x0 <= this.size.width) {
+                    drawVideoClip(clip, x0, x1, videoTop, geo.trackH, zoom, thumbnails, clip.id == selectedClipId)
+                }
+                start += clip.durationMs
             }
-            start += clip.durationMs
         }
 
-        // STEP 9: Audio track. Each clip sits at its own offset.
-        for (clip in timeline.audioClips) {
+        // STEP 10: Audio track. Each clip sits at its own offset.
+        for (clip in shown.audioClips) {
             val x0 = TimelineScale.timeToX(clip.timelineOffsetMs.toDouble(), position, cx, zoom)
             val x1 = TimelineScale.timeToX((clip.timelineOffsetMs + clip.durationMs).toDouble(), position, cx, zoom)
             if (x1 < 0 || x0 > this.size.width) continue
             val selected = clip.id == selectedClipId
-            drawRoundRect(AudioGreen.copy(alpha = 0.35f), Offset(x0 + 1, audioTop), Size(x1 - x0 - 2, audioH), CornerRadius(6.dp.toPx()))
-            if (selected) drawRoundRect(Color.White, Offset(x0 + 1, audioTop), Size(x1 - x0 - 2, audioH), CornerRadius(6.dp.toPx()), style = Stroke(2.dp.toPx()))
-            val textX = maxOf(x0, 0f) + 6.dp.toPx()
-            val room = (x1 - textX - 4.dp.toPx()).toInt()
+            val lifted = (drag as? EditDrag.MoveAudio)?.clipId == clip.id
+            drawRoundRect(
+                AudioGreen.copy(alpha = if (lifted) 0.6f else 0.35f),
+                Offset(x0 + 1, audioTop), Size(x1 - x0 - 2, geo.audioH), CornerRadius(6.dp.toPx()),
+            )
+            val textX = maxOf(x0, 0f) + if (selected) HandleWidth.toPx() + 4.dp.toPx() else 6.dp.toPx()
+            val room = (x1 - textX - 4.dp.toPx() - if (selected) HandleWidth.toPx() else 0f).toInt()
             if (room > 20) {
                 drawText(
-                    textMeasurer, "♪ ${clip.displayName}", Offset(textX, audioTop + (audioH - 14.sp.toPx()) / 2),
+                    textMeasurer, "♪ ${clip.displayName}", Offset(textX, audioTop + (geo.audioH - 14.sp.toPx()) / 2),
                     clipNameStyle, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    size = Size(room.toFloat(), audioH),
+                    size = Size(room.toFloat(), geo.audioH),
                 )
             }
+            if (selected) drawSelection(x0, x1, audioTop, geo.audioH)
         }
 
-        // STEP 10: The playhead: a white line with a small triangle on top.
+        // STEP 11: The playhead: a white line with a small triangle on top.
         drawLine(Color.White, Offset(cx, 0f), Offset(cx, this.size.height), strokeWidth = 2.dp.toPx())
         val tri = Path().apply {
             moveTo(cx - 6.dp.toPx(), 0f); lineTo(cx + 6.dp.toPx(), 0f); lineTo(cx, 8.dp.toPx()); close()
@@ -219,11 +399,71 @@ fun TimelineView(
     }
 }
 
-// STEP 11: The ruler: tick marks with time labels, spaced so labels never overlap.
-private fun DrawScope.drawRuler(
-    position: Double, zoom: Float, cx: Float, h: Float,
-    tm: androidx.compose.ui.text.TextMeasurer, style: TextStyle,
-) {
+// STEP 12: Row positions in pixels (computed from dp with the screen density).
+private class Geometry(d: Float) {
+    val rulerH = RulerHeight.value * d
+    val trackH = VideoTrackHeight.value * d
+    val audioTop = rulerH + trackH + TrackGap.value * d
+    val audioH = AudioTrackHeight.value * d
+    val handleTouch = HandleTouch.value * d
+    val reorderGap = ReorderGap.value * d
+}
+
+// STEP 13: Snap targets for an edge of [clip]: the playhead, time 0, and
+// the edges of clips on the OTHER track (and other audio clips). Edges of
+// later video clips move while you trim, so they aren't useful targets.
+private fun snapPointsFor(tl: Timeline, clip: Clip, playheadMs: Double): List<Long> {
+    val points = mutableListOf(0L, playheadMs.toLong())
+    if (clip.kind == MediaKind.AUDIO) {
+        points += TimelineOps.edgeTimes(tl.copy(audioClips = emptyList()))
+        tl.audioClips.filter { it.id != clip.id }.forEach { points += listOf(it.timelineOffsetMs, it.timelineOffsetMs + it.durationMs) }
+    } else {
+        tl.audioClips.forEach { points += listOf(it.timelineOffsetMs, it.timelineOffsetMs + it.durationMs) }
+    }
+    return points
+}
+
+private fun clipTimelineStart(tl: Timeline, clip: Clip): Long =
+    if (clip.kind == MediaKind.AUDIO) clip.timelineOffsetMs
+    else TimelineOps.videoStarts(tl)[tl.videoClips.indexOfFirst { it.id == clip.id }]
+
+// STEP 14: Is the finger on a trim handle of the selected clip? Returns
+// (clip, isLeftEdge).
+private fun handleAt(
+    tl: Timeline, selectedId: String?, p: Offset, position: Double, zoom: Float, cx: Float, g: Geometry,
+): Pair<Clip, Boolean>? {
+    val clip = TimelineOps.findClip(tl, selectedId) ?: return null
+    val isAudio = clip.kind == MediaKind.AUDIO
+    val top = if (isAudio) g.audioTop else g.rulerH
+    val h = if (isAudio) g.audioH else g.trackH
+    if (p.y < top - 8 || p.y > top + h + 8) return null
+    val start = clipTimelineStart(tl, clip)
+    val x0 = TimelineScale.timeToX(start.toDouble(), position, cx, zoom)
+    val x1 = TimelineScale.timeToX((start + clip.durationMs).toDouble(), position, cx, zoom)
+    val dl = abs(p.x - x0)
+    val dr = abs(p.x - x1)
+    return when {
+        dl <= g.handleTouch && dl <= dr -> clip to true
+        dr <= g.handleTouch -> clip to false
+        else -> null
+    }
+}
+
+// STEP 15: Which clip is at a point (null = empty space).
+private fun clipAt(tl: Timeline, p: Offset, position: Double, zoom: Float, cx: Float, g: Geometry): Clip? {
+    val t = TimelineScale.xToTime(p.x, position, cx, zoom)
+    return when (p.y) {
+        in g.rulerH..(g.rulerH + g.trackH) ->
+            TimelineOps.videoClipAt(tl, t.toLong())?.let { (i, _) -> tl.videoClips[i] }
+        in g.audioTop..(g.audioTop + g.audioH) -> tl.audioClips.firstOrNull {
+            t >= it.timelineOffsetMs && t < it.timelineOffsetMs + it.durationMs
+        }
+        else -> null
+    }
+}
+
+// STEP 16: The ruler: tick marks with time labels, spaced so labels never overlap.
+private fun DrawScope.drawRuler(position: Double, zoom: Float, cx: Float, h: Float, tm: TextMeasurer, style: TextStyle) {
     val step = TimelineScale.rulerStepMs(zoom, 72.dp.toPx())
     val firstMs = (TimelineScale.xToTime(0f, position, cx, zoom) / step).toLong().coerceAtLeast(0) * step
     var t = firstMs
@@ -233,7 +473,6 @@ private fun DrawScope.drawRuler(
         if (x >= -50) {
             drawLine(TextSecondary, Offset(x, h - 6.dp.toPx()), Offset(x, h), strokeWidth = 1.dp.toPx())
             drawText(tm, TimelineScale.rulerLabel(t, step), Offset(x + 3.dp.toPx(), 2.dp.toPx()), style)
-            // Half-step minor tick.
             val xm = TimelineScale.timeToX(t + step / 2.0, position, cx, zoom)
             drawLine(TextSecondary.copy(alpha = 0.5f), Offset(xm, h - 3.dp.toPx()), Offset(xm, h), strokeWidth = 1.dp.toPx())
         }
@@ -241,38 +480,69 @@ private fun DrawScope.drawRuler(
     }
 }
 
-// STEP 12: One video/photo clip: a rounded box filled with thumbnails.
+// STEP 17: One video/photo clip: a rounded box filled with thumbnails.
 private fun DrawScope.drawVideoClip(
-    clip: Clip, x0: Float, x1: Float, top: Float, h: Float, timelineStartMs: Long,
-    zoom: Float, cx: Float, thumbs: ThumbnailLoader, selected: Boolean,
+    clip: Clip, x0: Float, x1: Float, top: Float, h: Float, zoom: Float, thumbs: ThumbnailLoader, selected: Boolean,
 ) {
     val left = x0 + 1
     val width = x1 - x0 - 2
     if (width <= 0) return
-    val radius = CornerRadius(6.dp.toPx())
-    drawRoundRect(PanelHigh, Offset(left, top), Size(width, h), radius)
-
-    // Thumbnails are square tiles (side = track height), drawn only where
-    // they're on screen.
+    drawRoundRect(PanelHigh, Offset(left, top), Size(width, h), CornerRadius(6.dp.toPx()))
     clipRect(maxOf(left, 0f), top, minOf(left + width, size.width), top + h) {
-        val firstTile = (((0f - left) / h).toInt()).coerceAtLeast(0)
-        var i = firstTile
+        var i = ((0f - left) / h).toInt().coerceAtLeast(0)
         while (true) {
             val tx = left + i * h
             if (tx > size.width || tx > left + width) break
-            val key = thumbKeyFor(clip, i, h, zoom)
-            val img = thumbs[key]
-            if (img != null) {
-                drawImage(
-                    img,
-                    dstOffset = androidx.compose.ui.unit.IntOffset(tx.toInt(), top.toInt()),
-                    dstSize = androidx.compose.ui.unit.IntSize(h.toInt(), h.toInt()),
-                )
+            thumbs[thumbKeyFor(clip, i, h, zoom)]?.let { img ->
+                drawImage(img, dstOffset = IntOffset(tx.toInt(), top.toInt()), dstSize = IntSize(h.toInt(), h.toInt()))
             }
             i++
         }
     }
-    if (selected) drawRoundRect(Color.White, Offset(left, top), Size(width, h), radius, style = Stroke(2.dp.toPx()))
+    if (selected) drawSelection(x0, x1, top, h)
+}
+
+// STEP 18: Selection: white outline plus two grab handles for trimming.
+private fun DrawScope.drawSelection(x0: Float, x1: Float, top: Float, h: Float) {
+    val hw = HandleWidth.toPx()
+    val r = CornerRadius(6.dp.toPx())
+    drawRoundRect(Color.White, Offset(x0 + 1, top), Size(x1 - x0 - 2, h), r, style = Stroke(2.dp.toPx()))
+    for (x in listOf(x0 + 1, x1 - 1 - hw)) {
+        drawRoundRect(Color.White, Offset(x, top), Size(hw, h), r)
+        // Grip line in the middle of the handle.
+        drawLine(Ink, Offset(x + hw / 2, top + h * 0.3f), Offset(x + hw / 2, top + h * 0.7f), strokeWidth = 2.dp.toPx())
+    }
+}
+
+// STEP 19: Reorder mode: every clip becomes a square tile. The one you're
+// holding follows your finger, and the others open a gap where it would land.
+private fun DrawScope.drawReorderRow(
+    tl: Timeline, r: EditDrag.Reorder, top: Float, g: Geometry, thumbs: ThumbnailLoader, tilePx: Float, zoom: Float,
+) {
+    val s = g.trackH
+    val slot = s + g.reorderGap
+    val others = tl.videoClips.filter { it.id != r.clipId }
+    others.forEachIndexed { j, clip ->
+        val index = if (j < r.target) j else j + 1
+        drawTile(clip, r.baseX + index * slot, top, s, thumbs, tilePx, zoom, lifted = false)
+    }
+    // Drop marker + the lifted tile under your finger.
+    val markerX = r.baseX + r.target * slot - g.reorderGap / 2
+    drawLine(Teal, Offset(markerX, top - 4.dp.toPx()), Offset(markerX, top + s + 4.dp.toPx()), strokeWidth = 3.dp.toPx())
+    tl.videoClips.firstOrNull { it.id == r.clipId }?.let {
+        drawTile(it, r.fingerX - s / 2, top - 6.dp.toPx(), s, thumbs, tilePx, zoom, lifted = true)
+    }
+}
+
+private fun DrawScope.drawTile(
+    clip: Clip, x: Float, top: Float, s: Float, thumbs: ThumbnailLoader, tilePx: Float, zoom: Float, lifted: Boolean,
+) {
+    if (x + s < 0 || x > size.width) return
+    drawRoundRect(PanelHigh, Offset(x, top), Size(s, s), CornerRadius(8.dp.toPx()))
+    thumbs[thumbKeyFor(clip, 0, tilePx, zoom)]?.let {
+        drawImage(it, dstOffset = IntOffset(x.toInt(), top.toInt()), dstSize = IntSize(s.toInt(), s.toInt()))
+    }
+    if (lifted) drawRoundRect(Teal, Offset(x, top), Size(s, s), CornerRadius(8.dp.toPx()), style = Stroke(3.dp.toPx()))
 }
 
 /** The thumbnail for tile number [i] of a clip (photos use one picture everywhere). */
@@ -284,7 +554,7 @@ private fun thumbKeyFor(clip: Clip, i: Int, tilePx: Float, zoom: Float): ThumbKe
         ThumbKey(clip.sourceUri, MediaKind.VIDEO, TimelineScale.thumbnailBucketMs(sourceMs.coerceAtMost(clip.trimEndMs), zoom, tilePx))
     }
 
-// STEP 13: Every thumbnail currently on screen, nearest the playhead first
+// STEP 20: Every thumbnail currently on screen, nearest the playhead first
 // (so the middle fills in first).
 private fun visibleThumbKeys(timeline: Timeline, position: Double, zoom: Float, width: Float, tilePx: Float): List<ThumbKey> {
     if (width <= 0f) return emptyList()
@@ -299,34 +569,11 @@ private fun visibleThumbKeys(timeline: Timeline, position: Double, zoom: Float, 
             while (true) {
                 val tx = x0 + i * tilePx
                 if (tx > width || tx > x1) break
-                out += kotlin.math.abs(tx + tilePx / 2 - cx) to thumbKeyFor(clip, i, tilePx, zoom)
+                out += abs(tx + tilePx / 2 - cx) to thumbKeyFor(clip, i, tilePx, zoom)
                 i++
             }
         }
         start += clip.durationMs
     }
     return out.sortedBy { it.first }.map { it.second }.distinct()
-}
-
-// STEP 14: Which clip is at a tapped point (null = empty space → deselect).
-private fun hitTest(timeline: Timeline, tap: Offset, position: Double, zoom: Float, cx: Float, density: Float): String? {
-    val rulerH = RulerHeight.value * density
-    val videoBottom = rulerH + VideoTrackHeight.value * density
-    val audioTop = videoBottom + TrackGap.value * density
-    val audioBottom = audioTop + AudioTrackHeight.value * density
-    val t = TimelineScale.xToTime(tap.x, position, cx, zoom)
-    return when (tap.y) {
-        in rulerH..videoBottom -> {
-            var start = 0L
-            timeline.videoClips.firstOrNull { c ->
-                val hit = t >= start && t < start + c.durationMs
-                start += c.durationMs
-                hit
-            }?.id
-        }
-        in audioTop..audioBottom -> timeline.audioClips.firstOrNull {
-            t >= it.timelineOffsetMs && t < it.timelineOffsetMs + it.durationMs
-        }?.id
-        else -> null
-    }
 }
